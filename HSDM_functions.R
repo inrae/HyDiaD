@@ -1,17 +1,18 @@
 ## ---------------------------
 ##
-## Script name: Hybrid Species Distribution Model
+## Script name: HyDiaD,  Hybrid Species Distribution Model for Diadromous fish
 ##
-## Purpose of script: This function uses the equations developed with Patrick
+## Purpose of script: This function uses the equations developed by Betsy Barber and Patrick
 ## Lambert to estimate spawner abundance for each catchment i at time t
 ##
-## Author: Dr. Betsy Barber
+## Author: Dr. Betsy Barber, Dr. Patrick Lambert
 ##
 ## Date Created: 2020-09-21
-## Date Updated: 2020-12-02
+## Date Updated: 2021-05-20
 ##
-## Copyright (c) Betsy Barber,
-## Email: betsy.barber@maine.edu, betsy.barber@inrae.fr
+## Copyright (c) Betsy Barber, 
+##               Patrick Lambert
+## Email: patrick.lambert@inrae.fr
 ##
 ## This program is free software: you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -46,6 +47,7 @@
 require(tidyverse)
 require(gbm)
 library(xlsx)
+library(dismo)
 
 #### Section 2: Load the data files that will be needed. ---------
 ### set the working directory:
@@ -55,49 +57,43 @@ library(xlsx)
 ## Climate data from three climate models - df is projected monthly values from 1951-2100
 # WILL NEED TO UPDATE THESE DATAFRAMES WHEN THE FOURTH MODEL IS ADDED! 
 # Update pathway as needed; uncomment as needed
-Enviro <- readRDS("Enviro_all_models_rcp45.RDS")
-#Enviro <- readRDS("Enviro_all_models_rcp85.RDS")
+Enviro <- readRDS("data_input/Enviro_all_models_rcp45.RDS")
+#Enviro <- readRDS("data_input/Enviro_all_models_rcp85.RDS")
 
 ## Need 10-year average of environmental data (1901-1911) for the initial HSI predictions
 # This is the saved df that has already been averaged; the script to perform the calculations is in folder "brt_calibration"
-Yr10_Ann <- readRDS("Yr10_Ann.RDS")
+Yr10_Ann <- readRDS("data_input/Yr10_Ann.RDS")
 
 ### 2.2. Catchment-specific data:
 ## Need the 'All_Basins' df that contains basin-specific data for all basins in EuroDiad v.4 
 # Update pathway as needed
-All_Basins <- readRDS("Info_All_Basins.RDS")
+All_Basins <- readRDS("data_input/Info_All_Basins.RDS")
 
 ## Need the 'outletDistanceMatrix' matrix that stores pairwise distances between all catchments in the Atlantic Area
-load("distanceMatrix15march.Rdata")
+load("data_input/distanceMatrix15march.Rdata")
 
 ### 2.3. Species-specific data:
 ## Need the 'Survey' df that stores the output from the expert survey for all 11 species
-# Variables from the survey or FishBase and are stored in excel file in folder "survey":
-Survey<- read.xlsx("Species_Parameters.xlsx", sheetIndex = 1, header = TRUE, as.data.frame = TRUE,
+# Variables from the survey or FishBase and are stored in excel file:
+Survey <- read.xlsx("data_input/Species_Parameters.xlsx", sheetIndex = 1, header = TRUE, as.data.frame = TRUE,
                    colClasses = (Response = "character"), stringsAsFactors = FALSE)
 Survey <- Survey %>%
   mutate_at(c("y", "kpa", "Dmax", "r", "Fsurv", "AveLambda"), as.numeric)
 ## Set rownames to subset later
 rownames(Survey) <- Survey$Lname
 
-## For each species, need to source the R file storing the metaparameters for the calibrated brtModel (Uncomment as needed)
-# Uncomment and update pathways as needed
-Alosa1 <- readRDS("Alosa_tc1_NoNile.RDS")
-#Fallax1 <- readRDS("Fallax_tc1_NoNile.RDS")
-#Sturio1 <- readRDS("Sturio_tc1_NoNile.RDS")
-#Anguilla1 <- readRDS("Anguilla_tc1_NoNile.RDS")
-#Lampetra1 <- readRDS("Lampetra_tc1_NoNile.RDS")
-#Liza1 <- readRDS("Liza_tc1_NoNile.RDS")
-#Osmer1 <- readRDS("Osmer_tc1_NoNile.RDS")
-#Petro1 <- readRDS("Petro_tc1_NoNile.RDS")
-#Platich1 <- readRDS("Platich_tc1_NoNile.RDS")
-#Salar1 <- readRDS("Salar_tc1_NoNile.RDS")
-#Trutta1 <- readRDS("Trutta_tc1_NoNile.RDS")
+## For each species, need to source the R file storing the metaparameters for the calibrated brtModel
+Species_BRT <- read.xlsx("data_input/Species_BRT.xlsx", sheetIndex = 1, header = TRUE, as.data.frame = TRUE, 
+                         stringsAsFactors = FALSE)
+## Set rownames to subset later
+rownames(Species_BRT) <- Species_BRT$Lname
+
 
 #### Section 3: Prepare dataframes and parameters for use as input for model runs.---------------------------------
 
 ### 3.1. Catchment-specific lists:
 ## Subset distance matrix to remove rows and columns for "Altaelv" and "Tana" in Norway; we decided to exclude these catchments
+#TODO update the distanceMatrix
 outletDistanceMatrix <- outletDistanceMatrix[!rownames(outletDistanceMatrix) %in% c("Altaelv", "Tana"),
                                              !colnames(outletDistanceMatrix) %in% c("Altaelv", "Tana")]
 
@@ -114,8 +110,12 @@ AAbasins <- DF.df %>%
   dplyr::select('Basin_name')
 
 ### 3.2. Species-specific parameter lists:
-## Define the species and the corresponding brt calibration
-brtModel = Alosa1
+## Define the species
+Species <- 'AAlosa'
+
+## Define the corresponding calibrated brt 
+brtModel <- readRDS(paste0("data_input/brt_output/", Species_BRT[Species, 'BRT_RDS']))
+
 
 ## Optional: Can clear the workspace, but keep outside dfs that are needed
 #rm(list = setdiff(ls(), c('AAbasins', 'All_Basins', 'Enviro',
@@ -124,7 +124,6 @@ brtModel = Alosa1
 ## Define list of parameters to input for functions
 # First need to define which species is being tested 
 # in order to correctly subset the survey results
-Species <- 'AAlosa'
 Disp_parm <- list(
   
   ## Currently used in HSDM functions:
@@ -191,11 +190,9 @@ Disp_parm <- list(
 FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
   ### First, set up dataframe with 10-year average of environ data from 1901-1911 and basin-specific data
   ## This is to predict the initial HSI for all basins in the AA
-  df10Ann <- merge(
-    All_Basins[,c('basin_id', 'Surf', 'Length', 'Alt',
-                  'Basin')],
-    Yr10_Ann, 'basin_id', all.x = TRUE)
-  
+  df10Ann <- All_Basins %>%  dplyr::select(c('basin_id', 'Surf', 'Length', 'Alt', 'Basin')) %>% 
+    left_join(Yr10_Ann, by = 'basin_id')
+
   ### Next, pull out information from calibrated brt (simplified model)
   pa <- data.frame(
     basin_id = brtModel$simplified_model$gbm.call$dataframe$basin_id,
@@ -231,14 +228,16 @@ FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
     )
   
   ### Merge the initial HSI with other basin information
-  basininfo <- inner_join(basinbrt,
-                          All_Basins,
+  basininfo <- basinbrt %>% inner_join(All_Basins,
                           by = c('Basin_name' = 'Basin'))
   
   ### Merge the basin info with AAbasins, keep all rows of AAbasins
-  InitProb <- merge(AAbasins, basininfo, by = 'Basin_name',
-                    sort = TRUE, all.x = TRUE)
-  
+  # InitProb <- merge(AAbasins, basininfo, by = 'Basin_name',
+  #                   sort = TRUE, all.x = TRUE)
+  InitProb <- AAbasins %>% 
+    left_join(basininfo,  by = 'Basin_name') %>%
+    arrange(Basin_name)
+    
   ### Filter out any rows with NA in the basin ID, basin name, initial HSI, or surface area 
   BasinInfo <- InitProb %>%
     filter_at(vars(c(basin_id, Basin_name, HSIt1, Surf)), all_vars(!is.na(.)))
