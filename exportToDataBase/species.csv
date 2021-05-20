@@ -1,0 +1,29 @@
+species_id,latin_name,l_name,english_name
+1,Acipenser gueldenstaedtii,,
+2,Acipenser naccarii,,
+3,Acipenser stellatus,,
+4,Acipenser sturio,ASturio,European sturgeon
+5,Alosa algeriensis,,
+6,Alosa alosa,AAlosa,Allis shad
+7,Alosa caspia,,
+8,Alosa fallax,AFallax,Twaite shad
+9,Alosa immaculata,,
+10,Alosa kessleri,,
+11,Alosa tanaica,,
+12,Alosa volgensis,,
+13,Anguilla anguilla,AAnguilla,European eel
+14,Caspiomyzon wagneri,,
+15,Coregonus oxyrinchus,,
+16,Coregonus sp.,,
+17,Huso huso,,
+18,Lampetra fluviatilis,LFluviatilis,River lamprey
+19,Liza ramada,LRamada,Thin lipped grey mullet
+20,Osmerus eperlanus,OEperlanus,European smelt
+21,Petromyzon marinus,PMarinus,Sea lamprey
+22,Platichthys flesus,PFlesus,European flounder
+23,Salmo caspius,,
+24,Salmo labrax,,
+25,Salmo salar,SSalar,Atlantic salmon
+26,Salmo trutta,STrutta,Sea trout
+27,Salvelinus alpinus,,
+28,Vimba vimba,,
