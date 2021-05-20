@@ -3,7 +3,7 @@ library(tidyr)
 library(tidyverse)
 
 # conversion between climatic model names
-model_FIC <- read.csv("climatic_model.csv", stringsAsFactors = FALSE )
+model_FIC <- read.csv("exportToDataBase/climatic_model.csv", stringsAsFactors = FALSE )
 
 # conersion between species names
 species <- read.csv("species.csv", stringsAsFactors = FALSE )
