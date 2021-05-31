@@ -5,19 +5,19 @@ library(tidyverse)
 # conversion between climatic model names
 model_FIC <- read.csv("exportToDataBase/climatic_model.csv", stringsAsFactors = FALSE )
 
-# conersion between species names
-species <- read.csv("species.csv", stringsAsFactors = FALSE )
+# conversion between species names
+species <- read.csv("exportToDataBase/species.csv", stringsAsFactors = FALSE )
 species %>% dplyr::select(species_id, latin_name, l_name)
 
 # example of output model
 # results <- readRDS("Results_Alosa.RDS")
-results <- readRDS("exportToDataBase/Ex_HSDM_Results_wrcp.RDS")
+
 
 ## Pluck only the Nit results
 #Tmp_nit <- modify_depth(results[[1]], 2, pluck("Nit"))
 
 # load useful parameters
-# TODO need to load climatic scenario when availibel in the RDS file
+# TODO need to load climatic scenario when available in the RDS file
 surf_id = results[[2]] %>%  select(Basin_name, Surf, basin_id)
 Dmax = results[[1]][[1]]$ParmSet$Dmax
 species_name = results[[1]][[1]]$ParmSet$Lname
