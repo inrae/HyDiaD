@@ -5,8 +5,8 @@
 ## Purpose of script: This function uses the equations developed by Betsy Barber and Patrick
 ## Lambert to estimate spawner abundance for each catchment i at time t
 ##
-## Author: Dr. Betsy Barber, Dr. Patrick Lambert
-##
+## Author: Dr. Betsy Barber, 
+##  Modified by Patrick Lambert
 ## Date Created: 2020-09-21
 ## Date Updated: 2021-05-20
 ##
@@ -40,12 +40,12 @@
 ## ---------------------------
 
 ## Clear the workspace:
-#rm(list = ls())
+rm(list = ls())
 
 #### Section 1: Load the packages we will need:  ----
 
-require(tidyverse)
-require(gbm)
+library(tidyverse)
+library(gbm)
 library(xlsx)
 library(dismo)
 
@@ -56,9 +56,10 @@ library(dismo)
 ### 2.1. Environmental predictor variables:
 ## Climate data from three climate models - df is projected monthly values from 1951-2100
 # WILL NEED TO UPDATE THESE DATAFRAMES WHEN THE FOURTH MODEL IS ADDED! 
-# Update pathway as needed; uncomment as needed
-Enviro <- readRDS("data_input/Enviro_all_models_rcp45.RDS")
-#Enviro <- readRDS("data_input/Enviro_all_models_rcp85.RDS")
+# Update pathway as needed; 
+rcp = 'rcp85'
+Enviro <- readRDS(paste0("data_input/Enviro_all_models_",rcp,".RDS"))
+
 
 ## Need 10-year average of environmental data (1901-1911) for the initial HSI predictions
 # This is the saved df that has already been averaged; the script to perform the calculations is in folder "brt_calibration"
@@ -194,13 +195,17 @@ FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
     left_join(Yr10_Ann, by = 'basin_id')
 
   ### Next, pull out information from calibrated brt (simplified model)
-  pa <- data.frame(
-    basin_id = brtModel$simplified_model$gbm.call$dataframe$basin_id,
-    Basin_name = brtModel$simplified_model$gbm.call$dataframe$Basin.x,
-    presence_absence = brtModel$simplified_model$gbm.call$dataframe$presence_absence
-    )
+  # pa <- data.frame(
+  #   basin_id = brtModel$simplified_model$gbm.call$dataframe$basin_id,
+  #   Basin_name = brtModel$simplified_model$gbm.call$dataframe$Basin.x,
+  #   presence_absence = brtModel$simplified_model$gbm.call$dataframe$presence_absence
+  #   )
+  # pajoin <- full_join(pa, df10Ann, by = "basin_id")
   
-  pajoin <- full_join(pa, df10Ann, by = "basin_id")
+  pajoin <- brtModel$simplified_model$gbm.call$dataframe %>% 
+    dplyr::select(basin_id, Basin, presence) %>% 
+    full_join(df10Ann, by = "basin_id")
+  
   
   ### Subset to only Atlantic Area basins
   tempdf <- pajoin %>%
@@ -294,7 +299,7 @@ FUNdistmatrix <- function(BasinInfo, outletDistanceMatrix){
 #### Step 3: Create all dispersal matrices: -----------------------------------
 
 ### Create a function to convert the estimated mean mortality during
-## disperal between basins, to a mortality rate per km of dispersal
+## dispersal between basins, to a mortality rate per km of dispersal
 ## by dividing the log of mean survival by the mean dispersal distance.
 ## (m is negative)
 FUNm <- function(FSurv, MeanDist){
@@ -363,7 +368,7 @@ FUNexpMatrix <- function(a, b, dmUse, NatalStray){
   return(expMatrix)
 }
 
-#### Step 4: Create dataframes to hold data for a model run. --------------
+#### Step 4: Create empty dataframes to hold data for a model run. --------------
 
 ### Create function to create empty fields for populations components
 ## for each climate model.
@@ -665,7 +670,7 @@ FUNpopCalc <- function(c, i, BasinInfo, parm){
   return(c)
 }
 
-#### Step 9: Combine all of the smaller fumctions to calculate the populations and dispersal-------------
+#### Step 9: Combine all of the smaller functions to calculate the populations and dispersal-------------
 
 ### Use all of the smaller function to calculate populations.
 dispersalFunc <- function(AAbasins, All_Basins, brtModel, Disp_parm,
@@ -879,7 +884,9 @@ results <- dispersalFunc(AAbasins = AAbasins,
 # Calculated values should start appearing in all of these dataframes 
 # starting in column "Burn1"
 
-## NOTE 2: Script to subset the results and create heatplots is in file "Subset_heatplot.R"
+saveRDS(results, file = paste0("data_ouput/results_", Species,"_",rcp, ".RDS" ))
+
+## NOTE 2: Script to subset the results and create heatplots is in file "results_complexhp.R"
 
 
 
