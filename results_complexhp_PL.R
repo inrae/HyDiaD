@@ -28,16 +28,7 @@
 ## Notes:
 ##   
 ##
-## ---------------------------
-
-rm(list=ls())
-
-options(scipen = 6, digits = 4) # I prefer to view outputs in non-scientific notation
-memory.limit(30000000)     # this is needed on some PCs to increase memory allowance, but has no impact on macs.
-
-
-## ---------------------------
-
+## -----------------------------------------
 ## Packages:  (uncomment as required)
 
 library(tidyverse)
@@ -52,12 +43,18 @@ library(RColorBrewer) #Used for color scale for annotations
 #install_github("jokergoo/ComplexHeatmap")
 library(ComplexHeatmap)
 
+## ---------------------------
+rm(list=ls())
+
+options(scipen = 6, digits = 4) # I prefer to view outputs in non-scientific notation
+memory.limit(30000000)     # this is needed on some PCs to increase memory allowance, but has no impact on macs.
 
 ## ---------------------------
 
 ####Step 1: Organize results from running code in file "HSDM_functions" --------------------
 ## Sourced functions and loaded datasets:
-results <- readRDS("Alosa_rcp85_Jan2021.RDS")
+# results <- readRDS("Alosa_rcp85_Jan2021.RDS")
+results <- readRDS("data_output/results_AAlosa_rcp85.RDS")
 #results <- readRDS("Alosa_rcp45_Jan2021.RDS")
 #results <- readRDS("Fallax_rcp85_Jan2021.RDS")
 #results <- readRDS("Fallax_rcp45_Jan2021.RDS")
@@ -193,7 +190,7 @@ FUNprep2 <- function(df){
 }
 
 ## Run the funcion for each climate model
-Results_cn <- FUNprep2(df= SS_cn)
+Results_cn <- FUNprep2(df = SS_cn)
 Results_cs <- FUNprep2(SS_cs)
 Results_no <- FUNprep2(SS_no)
 
@@ -254,7 +251,7 @@ Ave_Den <- FUNprepave(SS_ave, 'AveDen')
 Ave_HSI <- FUNprepave(SS_ave, 'AveHSI')
 Ave_Nit <- FUNprepave(SS_ave, 'AveNit')
 
-Results_all = list(Ave_SR =Ave_SR,
+Results_all = list(Ave_SR = Ave_SR,
                    Ave_Den = Ave_Den, 
                    Ave_HSI = Ave_HSI,
                    Ave_Nit = Ave_Nit)
