@@ -195,15 +195,8 @@ FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
     left_join(Yr10_Ann, by = 'basin_id')
 
   ### Next, pull out information from calibrated brt (simplified model)
-  # pa <- data.frame(
-  #   basin_id = brtModel$simplified_model$gbm.call$dataframe$basin_id,
-  #   Basin_name = brtModel$simplified_model$gbm.call$dataframe$Basin.x,
-  #   presence_absence = brtModel$simplified_model$gbm.call$dataframe$presence_absence
-  #   )
-  # pajoin <- full_join(pa, df10Ann, by = "basin_id")
-  
   pajoin <- brtModel$simplified_model$gbm.call$dataframe %>% 
-    dplyr::select(basin_id, Basin, presence) %>% 
+    dplyr::select(basin_id, Basin_name = Basin.x, presence_absence = presence_absence) %>% 
     full_join(df10Ann, by = "basin_id")
   
   
@@ -884,7 +877,7 @@ results <- dispersalFunc(AAbasins = AAbasins,
 # Calculated values should start appearing in all of these dataframes 
 # starting in column "Burn1"
 
-saveRDS(results, file = paste0("data_ouput/results_", Species,"_",rcp, ".RDS" ))
+saveRDS(results, file = paste0("data_output/results_", Species,"_",rcp, ".RDS" ))
 
 ## NOTE 2: Script to subset the results and create heatplots is in file "results_complexhp.R"
 
