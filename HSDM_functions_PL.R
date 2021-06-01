@@ -133,6 +133,7 @@ Disp_parm <- list(
   Lname = Survey[Species, 'Lname'],
   ## 'Y' parameter from the survey (proportion of emigrants)
   # Use recalibrated value "y2"
+  # (gamma in paper equations)
   y = Survey[Species, 'y2'],
   ## 'A' parameter from the survey (alpha = scale parameter for dispersal kernel)
   # Use recalibrated value "alpha2"
@@ -146,9 +147,9 @@ Disp_parm <- list(
   Dmax = Survey[Species, 'Dmax'],
   ## 'R' parameter from the survey (growth rate, without taking into account anthropogenic mortality)
   r = Survey[Species, 'r'],
-  ## 'eh1' parameter from the survey; currently set to eh1 = 1 (anthropogenic mortality)
+  ## 'eh1' parameter from the survey; currently set to eh1 = 1 (anthropogenic mortality related to habitat degradation)
   eh1 = exp(0),
-  ## 'eh2' parameter from the survey; currently set to eh2 = 1 (anthropogenic mortality)
+  ## 'eh2' parameter from the survey; currently set to eh2 = 1 (anthropogenic mortality related to fish e.g fishery)
   eh2 = exp(0),
   ## FSurv parameter from the survey (survival applied only to emigrants)
   FSurv = Survey[Species, 'Fsurv'],
@@ -435,14 +436,12 @@ FUNpredHSI <- function(x, BasinInfo, brtModel, Disp_parm, enviro){
     dplyr::filter(year %in% Disp_parm$envYr)
   
   ### merge dataframe to get environ data and basin data together
-  tempScen <- merge(
-    BasinInfo[,c('basin_id', 'Surf', 'Length', 'Alt',
-                 'Basin_name', 'presence_absence')],
-    tempEnv, 'basin_id', all.x = TRUE)
-  tempScen <- tempScen %>% arrange(year, Basin_name)
+  tempScen <- BasinInfo %>% dplyr::select(basin_id, Surf, Length, Alt, Basin_name, presence_absence) %>% 
+    left_join(tempEnv, by = 'basin_id') %>% 
+    arrange(year, Basin_name)
   
   ### Internal check to be sure that the basin names are correct
-  if (all(tempScen$Basin_name != row.names(x$HSI))){
+  if (all(tempScen$Basin_name != row.names(x$HSI))) {
     print(paste("Warning! Different basin names in",
                 "Environmental dataframe and distance matrix"))
   }
@@ -507,13 +506,13 @@ FUNinitNit <- function(x, BasinInfo, Disp_parm){
   
   ## Estimate inital populations for multiple year classes/bins.
   ## Check to see if the average age parameter is within bounds.
-  if(is.numeric(Disp_parm$avAge) &
-     Disp_parm$avAge >= 1){
+  if (is.numeric(Disp_parm$avAge) &
+     Disp_parm$avAge >= 1) {
     
     ## Check to see if the bins parameter is within bounds.
-    if(is.numeric(Disp_parm$bins) &
+    if (is.numeric(Disp_parm$bins) &
        Disp_parm$bins >= 1 &
-       Disp_parm$bins < 2 * Disp_parm$avAge){
+       Disp_parm$bins < 2 * Disp_parm$avAge) {
       
       ## Fill in an initial population for all the columns of a
       ## complete generation.
@@ -521,8 +520,8 @@ FUNinitNit <- function(x, BasinInfo, Disp_parm){
         1:floor(Disp_parm$avAge - (Disp_parm$bins / 2) +
                   Disp_parm$bins)]] <- x$Nit[,1]
       
-    } else if(is.numeric(Disp_parm$bins) &
-              Disp_parm$bins >= 2 * Disp_parm$avAge){
+    } else if (is.numeric(Disp_parm$bins) &
+              Disp_parm$bins >= 2 * Disp_parm$avAge) {
       ## Cohort parameter out of bounds. Return NAs to break the model.
       print('Warning! Bins parameter is too large')
       ### Estimate an initial population size for the first year.
@@ -606,7 +605,7 @@ FUNpopCalc <- function(c, i, BasinInfo, parm){
   
   ## Create a variable for the names of the columns (bins) contributing
   ## to this generation.
-  if(i > floor(parm$avAge - (parm$bins / 2) + parm$bins)){
+  if (i > floor(parm$avAge - (parm$bins / 2) + parm$bins)) {
     prevgen = colnames(c$HSI)[
       i - rev(floor(parm$avAge - (parm$bins / 2) + 1:parm$bins))
       ]
