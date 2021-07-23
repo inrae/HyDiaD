@@ -112,10 +112,10 @@ AAbasins <- DF.df %>%
 
 ### 3.2. Species-specific parameter lists:
 ## Define the species
-Species <- 'AAlosa'
-
+# Species <- 'AAlosa'
+Species <- 'LRamada'
 ## Define the corresponding calibrated brt 
-brtModel <- readRDS(paste0("data_input/brt_output/", Species_BRT[Species, 'BRT_RDS']))
+brtModel <- readRDS(paste0("brt/brt_output/", Species_BRT[Species, 'BRT_RDS']))
 
 
 ## Optional: Can clear the workspace, but keep outside dfs that are needed
