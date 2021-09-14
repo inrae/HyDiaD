@@ -44,10 +44,11 @@ rm(list = ls())
 
 #### Section 1: Load the packages we will need:  ----
 
-library(tidyverse)
 library(gbm)
-library(xlsx)
+#library(xlsx)
+library(readxl)
 library(dismo)
+library(tidyverse)
 
 #### Section 2: Load the data files that will be needed. ---------
 ### set the working directory:
@@ -76,25 +77,23 @@ load("data_input/distanceMatrix15march.Rdata")
 ### 2.3. Species-specific data:
 ## Need the 'Survey' df that stores the output from the expert survey for all 11 species
 # Variables from the survey or FishBase and are stored in excel file:
-Survey <- read.xlsx("data_input/Species_Parameters.xlsx", sheetIndex = 1, header = TRUE, as.data.frame = TRUE,
-                   colClasses = (Response = "character"), stringsAsFactors = FALSE)
-Survey <- Survey %>%
-  mutate_at(c("y", "kpa", "Dmax", "r", "Fsurv", "AveLambda"), as.numeric)
+Survey <- read_xlsx("data_input/Species_Parameters.xlsx", sheet = 1)
+
 ## Set rownames to subset later
-rownames(Survey) <- Survey$Lname
+# Survey <- read_xlsx("data_input/Species_Parameters.xlsx", sheet = 1) %>%  as.data.frame()
+# rownames(Survey) <- Survey$Lname
 
 ## For each species, need to source the R file storing the metaparameters for the calibrated brtModel
-Species_BRT <- read.xlsx("data_input/Species_BRT.xlsx", sheetIndex = 1, header = TRUE, as.data.frame = TRUE, 
-                         stringsAsFactors = FALSE)
+Species_BRT <- read_xlsx("data_input/Species_BRT.xlsx", sheet = 1) 
 ## Set rownames to subset later
-rownames(Species_BRT) <- Species_BRT$Lname
+#rownames(Species_BRT) <- Species_BRT$Lname
 
 
 #### Section 3: Prepare dataframes and parameters for use as input for model runs.---------------------------------
 
 ### 3.1. Catchment-specific lists:
 ## Subset distance matrix to remove rows and columns for "Altaelv" and "Tana" in Norway; we decided to exclude these catchments
-#TODO update the distanceMatrix
+#TODO update the distanceMatrix, use as a longer tibble ?
 outletDistanceMatrix <- outletDistanceMatrix[!rownames(outletDistanceMatrix) %in% c("Altaelv", "Tana"),
                                              !colnames(outletDistanceMatrix) %in% c("Altaelv", "Tana")]
 
@@ -113,9 +112,9 @@ AAbasins <- DF.df %>%
 ### 3.2. Species-specific parameter lists:
 ## Define the species
 # Species <- 'AAlosa'
-Species <- 'LRamada'
+Species <- 'AFallax'
 ## Define the corresponding calibrated brt 
-brtModel <- readRDS(paste0("brt/brt_output/", Species_BRT[Species, 'BRT_RDS']))
+brtModel <- readRDS(paste0("brt/brt_output/", Species_BRT %>% filter(Lname == Species) %>% pull(BRT_RDS)))
 
 
 ## Optional: Can clear the workspace, but keep outside dfs that are needed
@@ -130,39 +129,39 @@ Disp_parm <- list(
   ## Currently used in HSDM functions:
   
   ## Name of the current species
-  Lname = Survey[Species, 'Lname'],
+  Lname =  Species,
   ## 'Y' parameter from the survey (proportion of emigrants)
   # Use recalibrated value "y2"
   # (gamma in paper equations)
-  y = Survey[Species, 'y2'],
+  y = Survey %>% filter(Lname == Species) %>% pull(y2),
   ## 'A' parameter from the survey (alpha = scale parameter for dispersal kernel)
   # Use recalibrated value "alpha2"
-  a = Survey[Species, 'alpha2'], 
+  a = Survey %>% filter(Lname == Species) %>% pull(alpha2),
   ## 'B' parameter from the survey (beta = shape parameter for dispersal kernel)
   # Use recalibrated value beta2
-  b = Survey[Species, 'beta2'], 
+  b = Survey %>% filter(Lname == Species) %>% pull(beta2), 
   ## Lambda parameter from the survey (related to Allee effect)
-  lambda = Survey[Species, 'AveLambda'],
+  lambda =  Survey %>% filter(Lname == Species) %>% pull(AveLambda),  
   ## Max Density parameter from the survey (number of spawners per km2)
-  Dmax = Survey[Species, 'Dmax'],
-  ## 'R' parameter from the survey (growth rate, without taking into account anthropogenic mortality)
-  r = Survey[Species, 'r'],
+  Dmax =  Survey %>% filter(Lname == Species) %>% pull(Dmax), 
+  ## 'R' parameter from the survey (population growth rate, without taking into account anthropogenic mortality)
+  r =  Survey %>% filter(Lname == Species) %>% pull(r), 
   ## 'eh1' parameter from the survey; currently set to eh1 = 1 (anthropogenic mortality related to habitat degradation)
   eh1 = exp(0),
   ## 'eh2' parameter from the survey; currently set to eh2 = 1 (anthropogenic mortality related to fish e.g fishery)
   eh2 = exp(0),
   ## FSurv parameter from the survey (survival applied only to emigrants)
-  FSurv = Survey[Species, 'Fsurv'],
+  FSurv =  Survey %>% filter(Lname == Species) %>% pull(Fsurv),  
   ## Set the timeperiod to run the model for
   envYr = c(1951:2100),
   ## Specify the average generation time for the species (yrs).
-  avAge = Survey[Species, 'avAge'], # Whole numbers and decimals accepted (ie: 2 or 2.5).
+  avAge = Survey %>% filter(Lname == Species) %>% pull(avAge), # Whole numbers and decimals accepted (ie: 2 or 2.5).
   ## Specify the number of years to split offspring among (max < avAge*2).
-  bins = Survey[Species, 'cohorts'],
+  bins = Survey %>% filter(Lname == Species) %>% pull(cohorts),
   ## Specify the rcp from enviro
   rcp = Enviro$Ann_Enviro_cn$rcp[1],
   ## MeanDist parameter from the survey
-  MeanDist = Survey[Species, 'MeanDist'],
+  MeanDist = Survey %>% filter(Lname == Species) %>% pull(MeanDist),
   
   ## Currently not used in functions (but could be varied for predict.gbm)
   ## Kappa parameter from the survey
@@ -199,7 +198,6 @@ FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
   pajoin <- brtModel$simplified_model$gbm.call$dataframe %>% 
     dplyr::select(basin_id, Basin_name = Basin.x, presence_absence = presence_absence) %>% 
     full_join(df10Ann, by = "basin_id")
-  
   
   ### Subset to only Atlantic Area basins
   tempdf <- pajoin %>%
@@ -275,7 +273,7 @@ FUNdistmatrix <- function(BasinInfo, outletDistanceMatrix){
   
   ### Check that the rownames and column names are in the same order as
   ## each other for the distance matrix. If not, print a warning.
-  if(any(rownames(dmUse) != colnames(dmUse))){
+  if (any(rownames(dmUse) != colnames(dmUse))) {
     print("Warning! Row and column names are not equal in distance matrix")
     ### This code will switch the order of rows and columns in the distance
     ## matrix to match that of the Basin info df.
@@ -296,12 +294,12 @@ FUNdistmatrix <- function(BasinInfo, outletDistanceMatrix){
 ## dispersal between basins, to a mortality rate per km of dispersal
 ## by dividing the log of mean survival by the mean dispersal distance.
 ## (m is negative)
-FUNm <- function(FSurv, MeanDist){
-  if(FSurv > 0 & MeanDist > 0){
+FUNm <- function(FSurv, MeanDist) {
+  if (FSurv > 0 & MeanDist > 0) {
     m = log(FSurv) / MeanDist
-  } else if(FSurv <= 0 & MeanDist > 0){
+  } else if (FSurv <= 0 & MeanDist > 0) {
     m = log(0.001) / MeanDist
-  } else if(FSurv > 0 & MeanDist <= 0){
+  } else if (FSurv > 0 & MeanDist <= 0) {
     m = log(FSurv) / 0.001
   } else {
     m = log(0.001) / 0.001
@@ -408,7 +406,7 @@ FUNdatafields <- function(BasinInfo, Disp_parm, dmUse){
   
   ### Internal check to ensure that the population dataframe is the
   ## same order as the distance matrix.
-  if(any(rownames(fields$HSI) != rownames(dmUse))){
+  if (any(rownames(fields$HSI) != rownames(dmUse))) {
     print("Warning! HSI basins do not match distance matrix")
     #} else {
     ## Row names match
