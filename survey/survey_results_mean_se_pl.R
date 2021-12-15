@@ -46,10 +46,10 @@ library(scales)
 library(tidyverse)
 ## ---------------------------
 
+rm(list = ls())
 ## Sourced Functions:
-
-source("QuantFigNotLog.R") 
-source("QuantFigLogScale.R")
+source("./survey/QuantFigNotLog.R") 
+source("./survey/QuantFigLogScale.R")
 
 ## ---------------------------------------------------------------------------------------------------------------
 ##setwd("C:/Users/Betsy/Desktop/HDSM/HSDM_Script_Full/HDSM_all_files/species_parameters")
@@ -58,29 +58,27 @@ source("QuantFigLogScale.R")
 ###Note: Change name of file and sheetIndex as needed, but need to specify columns are characters and stringsAsFactors is false in order to convert to numeric below
 
 ##First load confidence levels for each participant and question
-path = "survey/data_input/"
-CLRes <- read_xlsx(paste0(path, "Survey_Response_Final.xlsx"), sheet = 1)
-
-## Next load the survey answer for each participant and question
-Values <- read_xlsx(paste0(path, "Survey_Response_Final.xlsx"), sheet = 2)
-
 ## Melt df for confidence level from wide format to long format for working with tidy
 ## Replace instances of na with "0" - for confidence levels only
-clres2 <- CLRes %>% 
+CLRes <- read_xlsx("./survey/data_input/Survey_Response_Final.xlsx", sheet = 1) %>% 
   pivot_longer(cols = DJ:IK, names_to = 'Person', values_to = 'CL') %>% 
-  replace_na(list(CL = 0))
+  replace_na(list(CL = 0)) 
 
-## Melt df for responses from wide format to long format
-## Replace instances of na with "0" - for confidence levels only
-values2 <- Values %>% 
-  pivot_longer(cols = DJ:IK, names_to = 'Person', values_to = 'Value') %>% 
-  replace_na(list(Value = 0))
+## Next load the survey answer for each participant and question
+Values <- read_xlsx("./survey/data_input/Survey_Response_Final.xlsx", sheet = 2) %>% 
+  mutate(across(DJ:IK, ~ as.numeric(.x)))%>% 
+  pivot_longer(cols = DJ:IK, names_to = 'Person', values_to = 'Response')
+
+#A VIRER
+# values2 <- read_xlsx("./survey/data_input/Survey_Response_Final.xlsx", sheet = 2) %>% 
+#   mutate(across(DJ:IK, ~ as.numeric(.x))) %>% 
+#   gather(Person, Response, DJ:IK)
 
 ## Join confidence level and response dataframes by question, species, and participant (person)
-df <- clres2 %>% 
-  inner_join(values2, by = c('Question', 'Species', 'Person'))
+df <- CLRes %>% 
+  inner_join(Values, by = c("Question", "Species", "Person"))
 
-# STOP HERE
+write_rds(df, "./survey/data_input/DF of survey responses.RDS")
 
 ##Note: generally, instances where confidence level = 0 should correspond with response = NA, but this may not always be the case
 # if participants provided a response but listed their confidence in their response as 0
@@ -88,80 +86,74 @@ df <- clres2 %>%
 #### Step 2a Confidence Levels: Calculate mean, se for confidence levels for all questions ----------------------------------
 
 ## First find the number of participants to use in SE calculation:
-nb <- clres2 %>% 
-  n_distinct('Person')
-
+np <- df %>% n_distinct('Person')
 ## Calculate mean and SE for confidence levels:
-# Here, "Response" is the indicated CL because we use the dataframe that only includes CL information 
-SppConf <- clres2 %>%
-  mutate_at("Response", as.numeric) %>%
-  dplyr::select(-Person) %>%
-  drop_na(Response) %>% #drop na's
-  filter(Response > 0) %>% #only include instances with CL > 0
+SppConf <- df %>%
+  filter(CL > 0) %>% #only include instances with CL > 0
   group_by(Species) %>%
-  summarise_at("Response", c(sum = sum, mean = mean, sd = sd)) %>% #calculate sum, mean, and sd for CL
-  mutate(lowerSD = mean - sd, upperSD = mean + sd) %>%
-  mutate(lowerSE = mean - (sd / sqrt(np)), upperSE = mean + (sd / sqrt(np))) #calculate se from sd
+  summarise_at("CL", c(sum = sum, mean = mean, sd = sd)) %>%  #calculate sum, mean, and sd for CL
+  mutate(lowerSD = mean - sd, 
+         upperSD = mean + sd, 
+         lowerSE = mean - (sd / sqrt(np)), 
+         upperSE = mean + (sd / sqrt(np))) #calculate se from sd
 
-# Caculate the number of responses for each species
-SppConfZero <- clres2 %>%
-  mutate_at("Response", as.numeric) %>%
-  dplyr::select(-Person) %>%
-  filter(Response != 0) %>%
-  group_by(Species) %>%
-  count(Species)
-
-SppConf <- inner_join(SppConf, SppConfZero, by = "Species")
-
+# add the number of responses for each species
+SppConf <- SppConf %>%  
+  inner_join(
+    df %>% 
+      filter(CL > 0) %>%
+      group_by(Species) %>%
+      count(Species), 
+    by = "Species")
 
 #### Step 2b Confidence Levels: Create figures of confidence levels and respondents by region ---------------------------------
 ### Respondents by region:
 
 ## Load in data with region listed for each participant
-Respondents <- read.xlsx("Respondents_by_region.xlsx", sheetIndex = 1, header = TRUE, as.data.frame = TRUE, 
-                         colClasses = (Response = "character"), stringsAsFactors = FALSE)
+Respondents <- read_xlsx("./survey/data_input/Respondents_by_region.xlsx", sheet = 1)
 
 # Select all unique combinations of person, region, and species: 
-Region2 <- values2 %>%
-  drop_na(Response) %>%
-  distinct(Person, Species, .keep_all = T) %>%
-  inner_join(Respondents, by = "Person") %>%
+Region2 <- df %>% 
+  drop_na(Value) %>% 
+  distinct(Person, Species) %>% 
+  left_join(Region2, by = c('Person', 'Species')) %>%
   select(Person, Species, region)
 
 # Count the number of responses for each species
 BySpecies <- Region2 %>%
   count(Species) %>%
-  mutate_at("n", as.numeric) %>%
-  arrange(n)
-RankBS <- as.vector(BySpecies$Species)
-BySpecies$Species <- factor(BySpecies$Species, levels = RankBS)
+  #mutate_at("n", as.numeric) %>%
+  arrange(n) %>% 
+  mutate(Species = factor(Species, levels = Species))
+
+# add factors to Region2
+Region2 <- Region2 %>%
+  mutate(Species = factor(Species, levels = BySpecies$Species ), 
+         region = factor(region, levels = c("Portugal", "Spain", "France", "UK", "Ireland")))
 
 #First show total number of participants for each species:
-ggplot(data = BySpecies, aes(fill = Species, x = factor(Species, level = RankBS), y = n)) +
+BySpecies %>% ggplot(aes(y = Species, fill = Species, x = n)) +
   geom_col(position = "dodge", color = "black") +
-  geom_text(aes(label = n), size = 6, vjust = -1) +
-  ggtitle("Number of Participants for Each Species (23 Total Participants)") +
-  theme(legend.position = "none", axis.text.x = element_text(size = 16, angle = 75, vjust = 0.6, hjust = 0.5),
-        axis.text.y = element_text(size = 16),
-        axis.title = element_text(size = 18), 
-        title = element_text(size = 18), strip.text.x = element_text(size = 16)) +
-  xlab("Species") + 
-  ylab("Number of Participants")
+  geom_text(aes(label = n), size = 6, vjust = 0.5, hjust = -0.2) +
+  ggtitle("Number of Participants for Each Species \n (23 Total Participants)") +
+  theme(legend.position = "none", 
+        axis.text.x = element_text(size = 14, angle = 0, vjust = 0.5, hjust = 0.5),
+        axis.text.y = element_text(size = 14),
+        axis.title = element_text(size = 16), 
+        title = element_text(size = 16), 
+        strip.text.x = element_text(size = 14)) +
+  ylab("Species") + 
+  xlab("Number of Participants") +
+  xlim(0,20)
 
 
 ## Then divide this by region:
-# Rank species by number or participants for gridded plot
-Rank3 <- Region2 %>%
-  arrange(factor(Species, levels = RankBS))
-Rank4 <- as.vector(Rank3$Species)
-Region2$Species <- factor(Region2$Species, levels = RankBS)
 
 # Define labels
-RgLb <- setNames(paste(unique(BySpecies$Species), "\nTotal N:", BySpecies$n), unique(BySpecies$Species))
+RgLb <- setNames(paste(unique(BySpecies$Species), 
+                       "\nTotal N:", BySpecies$n), unique(BySpecies$Species))
 
 # Rank regions within each plot
-Region2$region <- factor(Region2$region, levels = c("Portugal", "Spain", 
-                                                    "France", "UK", "Ireland"))
 
 #Create figure
 ggplot(data = Region2, aes(fill = region, x = region)) +
@@ -193,28 +185,14 @@ ggplot(data = Region2, aes(fill = region, x = region)) +
 # Use this color command for discrete data:
 # fillScale <- scale_fill_manual(name = "Species", values = myColors)
 
-
 ### Confidence levels 
 
-## Set level for CL responses for use in figures
-clres2$Response <- as.character(clres2$Response) #if set to numeric, doesn't work
-Confid3 <- clres2 %>%
-  drop_na(Response)
-Confid3$Response <- factor(Confid3$Response, levels = c("0", "25", "50", "75", "100"))
-
-## Drop NA, calculate sum
-# This uses counts from "BySpecies", as defined in section for respondents by region (Line 126)
-ConfTotal <- clres2 %>%
-  drop_na(Response) %>%
-  group_by(Species) %>%
-  mutate_at("Response", as.numeric) %>%
-  summarise_at("Response", sum) %>%
-  inner_join(BySpecies, by = "Species")
-
 # Write function for plots
+
+#TODO PL a concern about the Y axis. should be a number of response
 CLFunc <- function(data1, data2){
   clb <- setNames(paste(unique(data2$Species), "\nTotal CL:", data2$Response, " N:", data2$n), unique(data2$Species))
-  ggplot(data = data1, aes(fill = Response, x = Response)) +
+  data1 %>% ggplot(aes(fill = CL, x = CL)) +
     geom_bar(position = "dodge", color = "black") +
     scale_fill_viridis_d(option = "E") +
     ggtitle("Confidence levels by Species") +
@@ -224,60 +202,59 @@ CLFunc <- function(data1, data2){
           axis.title = element_text(size = 18), 
           title = element_text(size = 18), strip.text.x = element_text(size = 16)) +
     xlab("Confidence Level") + 
-    ylab("Number of Responses (out of 176 total)")
+    ylab("Number of Responses")
 }
 
 # First organize plots by species group
+
+## Set level for CL responses for use in figures
+Confid3 <- df %>% 
+  drop_na(CL) %>% 
+  mutate(CL = factor(CL, levels = c(0, 25, 50, 75, 100))) 
+
+## Drop NA, calculate sum
+# This uses counts from "BySpecies", as defined in section for respondents by region
+ConfTotal <- df %>%
+  drop_na(CL) %>%
+  group_by(Species) %>%
+  summarise_at("CL", sum) %>%
+  inner_join(BySpecies, by = "Species") %>% 
+  mutate(Species = factor(Species, levels = SppList ) ) 
+
+# Create plots
+CLFunc(Confid3, ConfTotal) + ggtitle("Confidence Level Ranked by Species Groups")
+
+## Next organize plots by rank (low confidence to high confidence) - also write total confidence next to species name
 SppList <- c("Allis Shad","Twaite Shad",
              "River Lamprey", "Sea Lamprey", 
              "Sea Trout", "Salmon", 
              "Smelt", "Sturgeon",
              "Flounder", "Mullet",  "Eel")
-clres2$Species <- factor(clres2$Species, levels = SppList)
-ConfTotal$Species <- factor(ConfTotal$Species, levels = SppList)
-# Create plots
-CLFunc(Confid3, ConfTotal) + ggtitle("Confidence Level Ranked by Species Groups")
-
-## Next organize plots by rank (low confidence to high confidence) - also write total confidence next to species name
-
-# Define function for ranking:
-RankFunc <- function(name1, data4, name2){
-  name1 <- data4 %>%
-    group_by(Species) %>%
-    mutate_at("Response", as.numeric) %>%
-    summarize_at("Response", sum) %>%
-    arrange(Response)
-  RankCL <- as.vector(name1$Species)
-  return(RankCL)
-}
-
-CLRank <- RankFunc(name1 = Confid2, data4 = clres2, name2 = RankCL)
-
+# ranking species by sum of CL
+CLRank <- df %>%     
+  group_by(Species) %>%
+  summarize_at("CL", sum) %>%
+  arrange(CL) %>% pull(Species)
+  
 # Rank results
-Confid4 <- clres2 %>%
-  drop_na(Response)
-Confid4$Species <- factor(Confid4$Species, levels = CLRank)
-Confid4$Response <- factor(Confid4$Response, levels = c("0", "25", "50", "75", "100"))
+Confid4 <- df %>%
+  drop_na(CL) %>% 
+  mutate(Species = factor(Species, levels =  CLRank),
+         CL = factor(CL, levels = c(0, 25, 50, 75, 100))) 
 
 # Create figure that ranks by total confidence level, low to high 
 CLFunc(Confid4, ConfTotal) + ggtitle("Confidence Level Ranked by Total Value Low to High")
 
 ## Next show mean and sd for each species:
 # organize by species grouping, then by low to high
-SppGrps <- c("Allis Shad","Twaite Shad","River Lamprey", "Sea Lamprey", "Sea Trout", 
-             "Salmon", "Smelt", "Sturgeon","Flounder", "Mullet",  "Eel")
 
 # Use dataframes calculated in Step 2a:
-SppConf$Species <- factor(SppConf$Species, levels = SppGrps)
-
-SppConf <- SppConf %>%
-  arrange(mean)
-scrank <- as.vector(SppConf$Species)
-SppConf <- SppConf %>%
-  arrange(factor(Species, levels = scrank)) 
+SppConf <- SppConf %>% 
+  arrange(mean) %>% 
+  mutate(Species = factor(Species, levels = .$Species) )
 
 #This creates plot of mean CL by species with SE added as error bars
-ggplot(data = SppConf, aes(x = factor(Species, level = scrank), y = mean, fill = Species)) +
+ggplot(data = SppConf, aes(x = Species, y = mean, fill = Species)) +
   geom_col(color = "black") +
   geom_errorbar(aes(ymin = lowerSE, ymax = upperSE), width = 0.2) +
   ylim(0, 100) +
@@ -298,7 +275,7 @@ ggplot(data = SppConf, aes(x = factor(Species, level = scrank), y = mean, fill =
 temp3 <- c(3, 4, 6, 7)
 ## These answers are percentages and do not need to be log-transformed
 temp4 <- c(5, 8)
-## Need separate lists and combined list fot the following code
+## Need separate lists and combined list for the following code
 temp5 <- c(temp3, temp4)
 
 ### Drop NAs for individual people and species combinations and calculate the response X confidence level column
@@ -306,11 +283,9 @@ temp5 <- c(temp3, temp4)
 AllData <- df %>%
   filter(Question %in% temp5) %>% #specify list of all quantitative questions
   drop_na(Value) %>% # drop any instance where the participant did not answer one of the questions (which happened often)
-  mutate_at(c("Value", "CL"), as.numeric) %>%
   mutate(mResponse = case_when(
     Question == 4 ~ 1/Value, #question 4 was calculated differently as 1/response
-    Question != 4 ~ Value
-  )) %>%
+    Question != 4 ~ Value)) %>%
   mutate(
     lResponse = case_when(
       Question %in% temp3 ~ log(mResponse), #log-transform questions in list temp3
@@ -353,7 +328,7 @@ for(i in temp5){ #For each question in the list of quantitative questions define
 
 ### For the SD, calculate the number of samples with CL > 0 that will be used in the equation as N
 ## Join the individual responses to the summarized data
-AllT <- inner_join(AllData, SumAllData, by = c("Question", "Species"))
+AllT <- AllData %>% inner_join(SumAllData, by = c("Question", "Species"))
 
 ### This dataframe is used to calculate n for the survey questions that are NOT on a log scale
 ## This calculates the number of responses for each question and species
@@ -658,7 +633,7 @@ SDfuncQ2$Species <- factor(SDfuncQ2$Species, levels = RankQ2)
 
 ## Create figure
 Q2Fig <- function(data1, data2, data3){
-    lbls <- setNames(paste(unique(data2$Species), ";Total CL:", data2$Conf, ";N:", data3$n,
+  lbls <- setNames(paste(unique(data2$Species), ";Total CL:", data2$Conf, ";N:", data3$n,
                          #"\nMean:", round(data2$WtAve), "+", round(data2$upSD), ",-", round(data2$dnSD),
                          #"SE"), unique(data2$Species))
                          "\nMean:", scientific(data2$WtAve, digits = 2), "+", scientific(data2$upSD, digits = 1),
