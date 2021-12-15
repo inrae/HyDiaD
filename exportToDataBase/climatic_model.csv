@@ -1,0 +1,13 @@
+climatic_model_id,climatic_model_code,oceanic_model,atmospheric_model,climatic_model_hm
+1,canesm2,CanESM2,CCCma-CanESM2,
+2,cnrmcm5,CNRM-CM5,CNRM-CERFACS-CNRM-CM5,cn
+3,csiromk360,CSIRO-Mk3-6-0,CSIRO-QCCCE-CSIRO-Mk3-6-0,cs
+4,gfdlesm2m,GFDL-ESM2M,NOAA-GFDL-GFDL-ESM2M,
+5,hadgem2es,HadGEM2-ES,MOHC-HadGEM2-ES,
+6,ipslcm5amr,IPSL-CM5A-MR,IPSL-IPSL-CM5A-MR,
+7,miroc5,MIROC5,MIROC-MIROC5,
+8,mpiesmmr,MPI-ESM_MR,MPI-M-MPI-ESM-LR,
+9,noresm1me,NorESM1-ME,NCC-NorESM1-M,no
+10,access10,ACCESS1-0,,
+11,mricgcm3,MRI-CGCM3,,
+12,ichececearth,,ICHEC-EC-EARTH,
