@@ -1,0 +1,957 @@
+---
+date: "`r Sys.Date()`"
+author: "Lambert et al."
+title: "DiadES survey on diadromous fish"
+output: 
+  officedown::rdocx_document:
+    mapstyles:
+      Normal: ['First Paragraph']
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE,  fig.cap = TRUE)
+library(officedown)
+library(officer)
+library(flextable)
+
+library(rfishbase)
+library(scales)
+
+library(readr)
+library(readxl)
+library(tidyverse)
+```
+
+# Data upload
+
+```{r}
+rm(list = ls())
+
+speciesName <- read_csv("./exportToDataBase/species.csv") %>% 
+  suppressMessages() %>% 
+  dplyr::select(species_id, latin_name, Lname = l_name) %>% 
+  drop_na()
+
+# Species order
+fish <- tibble(latin_name = c("Alosa alosa", "Alosa fallax",  "Lampetra fluviatilis",  "Petromyzon marinus", "Salmo salar", "Salmo trutta",
+                              "Acipenser sturio","Osmerus eperlanus", "Anguilla anguilla", "Chelon ramada", "Platichthys flesus"),
+               name =  c("Allis Shad","Twaite Shad",
+                         "River Lamprey", "Sea Lamprey", 
+                         "Salmon",  "Sea Trout", 
+                         "Sturgeon", "Smelt",
+                         "Eel", "Mullet", "Flounder")) %>% 
+  mutate(latin_name = factor(latin_name,levels = latin_name))
+
+
+fish <- fish %>% inner_join(speciesName, by = 'latin_name') %>% 
+  select(-species_id)
+```
+
+## Survey responses
+
+```{r surveyAnalysis}
+## for questions 2 to 10 
+
+##First load confidence levels for each participant and question
+## Melt df for confidence level from wide format to long format for working with tidy
+## Replace instances of na with "0" - for confidence levels only
+CLRes <- readxl::read_xlsx("./survey/data_input/Survey_Response_Final.xlsx", sheet = 1) %>% 
+  pivot_longer(cols = DJ:IK, names_to = 'Person', values_to = 'CL') %>% 
+  replace_na(list(CL = 0)) 
+
+## Next load the survey answer for each participant and question
+Values <- readxl::read_xlsx("./survey/data_input/Survey_Response_Final.xlsx", sheet = 2) %>% 
+  mutate(across(DJ:IK, ~ as.numeric(.x))) %>% 
+  pivot_longer(cols = DJ:IK, names_to = 'Person', values_to = 'Response') %>% 
+  suppressWarnings()
+
+## Join confidence level and response dataframes by question, species, and participant (person)
+SurveyResponse <- CLRes %>% 
+  inner_join(Values, by = c("Question", "Species", "Person")) %>%
+  # inverse question3  response to obtain a survival rate from egg to adult
+  mutate(Response = ifelse(Question == 4, 1/Response, Response ))
+
+
+#### Q2: Maximum fish density; requires additional calculations ----------------------------
+### The results for this question are stored in a different file in two separate pages:
+## The first page has the responses, with density already calculated using the surface area for the provided rivers
+# Surface area was taken from the EuroDiad database
+# A future update could use the surface area of estimated available spawning habitat rather than the entire watershed
+Q2 <-  readxl::read_xlsx("./survey/data_input/Survey_response_Q2.xlsx", sheet = 1)  %>% 
+  filter(Category == "Density") %>% 
+  pivot_longer(cols = AW:RK, names_to = 'Person', values_to = 'Response') %>% 
+  mutate(Response = as.numeric(Response)) %>% 
+  select(-c(Category))
+
+## The second page has the confidence levels
+clq2  <- 
+  readxl::read_xlsx("./survey/data_input/Survey_response_Q2.xlsx", sheet = 2)  %>% 
+  pivot_longer(cols = DJ:RK, names_to = 'Person', values_to = 'CL')
+
+Q2 <- Q2 %>% 
+  inner_join(clq2, by = c('Question', 'Species', 'Person')) %>% 
+  drop_na() 
+
+# merge question 2 to others
+SurveyResponse <- SurveyResponse %>% 
+  bind_rows(Q2) 
+
+rm(CLRes, Values, clq2, Q2 )
+
+# write_rds(SurveyResponse, "./survey/data_input/DF of survey responses.RDS")
+
+#### Step 3: Drop NAs for individual people and species combinations and calculate the response X confidence level column-------
+##Note: generally, instances where confidence level = 0 should correspond with response = NA, but this may not always be the case
+
+computeSurveyResult = function(SurveyResponse, logScaleQuestion, naturalScaleQuestion) {
+  # First divide questions into 
+  #    those with log scale: logScaleQuestion
+  #    those without log scale: naturalScaleQuestion 
+  
+  ## calculate mutated response * confidence level row-wise:
+  AllData <- SurveyResponse %>%
+    filter(Question %in% c(logScaleQuestion, naturalScaleQuestion)) %>%
+    filter(CL > 0) %>%
+    drop_na(Response) %>%
+    mutate(logScale = case_when(
+      Question %in% logScaleQuestion ~ TRUE,
+      Question %in% naturalScaleQuestion ~ FALSE),
+      mResponse = case_when(
+        Question %in% logScaleQuestion ~ log(Response),
+        Question %in% naturalScaleQuestion ~ Response),
+      ResConf =  mResponse * CL)
+  
+  ### Now summarize the data for (response * confidence level) and confidence level
+  ### Then calculate weighted mean (mu) and the number of samples with CL > 0 that will be used in the equation as N
+  SumAllData <- AllData %>%
+    group_by(Question, Species) %>%
+    summarise(sum_CL = sum(CL),
+              sum_CLsquare = sum(CL^2),
+              sum_ResConf = sum(ResConf),
+              N = n(), 
+              Neff = sum_CL^2/sum_CLsquare,
+              .groups = 'drop') %>% 
+    select(-sum_CLsquare) %>% 
+    mutate(mu = sum_ResConf / sum_CL)
+  
+  
+  ### to get a dataframe that has the group weighted average associated with each row of data:
+  AllData <- AllData %>% inner_join(SumAllData, by = c("Question", "Species")) 
+  
+  # calculate standard deviation and range around mu ( mu +- racine(sd2/N))
+  SurveyResult <- AllData %>% 
+    group_by(Question, Species, logScale , N, Neff, sum_CL, mu) %>%
+    summarise( sum_square = sum(CL*(mResponse - mu)^2), .groups = 'drop') %>% 
+    mutate(se = if_else(logScale,
+                        sqrt(sum_square / ((Neff-1) * sum_CL)),
+                        sqrt(sum_square / ((N-1) * sum_CL))),
+           dn =  mu - se,
+           up =  mu + se,
+           mu_natural = if_else(logScale, exp(mu), mu),
+           dn_natural = if_else(logScale, exp(dn), dn),
+           up_natural = if_else(logScale, exp(up), up)
+    ) 
+  
+  # return results
+  return(SurveyResult)
+}
+
+
+# compute weighted mean and standard error for question 2, 4,5,6,7,8
+SurveyResult <- computeSurveyResult(SurveyResponse, logScaleQuestion = c(2, 4, 6, 7), naturalScaleQuestion =  c(5, 8))
+
+#### Q3: Allee effect; requires additional calculations -------------------------------------------------------
+### Need to use surface area in calculation of results
+Q3 <-  
+  # Load surface area information 
+  readxl::read_xlsx("./survey/data_input/Survey_Response_Final.xlsx", sheet = 3) %>% 
+  # organize data in long format
+  pivot_longer(cols = DJ:PL, names_to = 'Person', values_to = 'SA') %>% 
+  # combine with response values from previously created dataframe (SurveyResponse)
+  inner_join(SurveyResponse, by = c("Question", "Species", "Person")) %>% 
+  # Combine maximum density Dmax (question 2) and responses from Q3
+  left_join(SurveyResult %>% 
+              filter(Question == 2) %>% 
+              select(Species, Dmax = mu_natural), 
+            by = 'Species') %>% 
+  # compute lamda and store in response
+  mutate(Response = Response / (Dmax * SA)) %>% 
+  select(Question, Species, Person, CL, Response)
+
+
+Q3 <- SurveyResponse %>% 
+  filter(Question ==3) %>% 
+  # join with surface area
+  left_join(  
+    # Load surface area information 
+    readxl::read_xlsx("./survey/data_input/Survey_Response_Final.xlsx", sheet = 3) %>% 
+      # organize data in long format
+      pivot_longer(cols = DJ:PL, names_to = 'Person', values_to = 'SA'),
+    by = c("Question", "Species", "Person")) %>% 
+  # Combine maximum density Dmax (question 2) and responses from Q3
+  inner_join(SurveyResult %>% 
+               filter(Question == 2) %>% 
+               select(Species, Dmax = mu_natural), 
+             by = 'Species') %>% 
+  # compute lamda and store in response
+  mutate(Response = Response / (Dmax * SA)) %>% 
+  select(Question, Species, Person, CL, Response)
+
+# add question 3 to SurveyResult
+SurveyResult <- SurveyResult %>%
+  # remove question 3 (with row responses)
+  filter(Question != 3) %>%
+  # add computed response for question 3
+  bind_rows(computeSurveyResult(Q3, logScaleQuestion = c(3), naturalScaleQuestion =  c()))
+
+# add latin name and arrange
+SurveyResult <- SurveyResult %>% 
+  inner_join(fish, by = c('Species' = 'name')) %>% 
+  arrange(latin_name)
+
+```
+
+## Additional data from HyDiaD
+```{r}
+
+infoBasins <- read_rds('./data_input/Info_All_Basins.RDS')
+
+outletDistance <- read_rds('./data_input/outletDistance.rds') %>% 
+  tibble() %>% 
+  left_join(infoBasins %>% select(Basin, country, ecoregion_name),
+            by = c('departure' = 'Basin')) %>% 
+  arrange(ecoregion_name) %>% 
+  mutate(ecoregion_name = factor(ecoregion_name))
+
+```
+
+## Additional data from fishbase
+### fecundity
+```{r fecundity, include=FALSE}
+fecundity <- fecundity(fish %>% pull(latin_name)) %>%
+  select(Species, Locality, FecundityMin, FecundityMax, FecundityMean, FecundityType, AddInfos) %>% 
+  mutate(FecundityMin = as.numeric(FecundityMin)) %>% 
+  #filter(Species == 'Platichthys flesus') %>% 
+  mutate(fecundity_middleRange = (FecundityMin + FecundityMax) / 2 ) %>% 
+  drop_na(fecundity_middleRange) %>%  
+  group_by(Species) %>%
+  summarise(FecundityMean = round(mean(fecundity_middleRange, na.rm = FALSE)),
+            FecundityGeomMean = round(exp(mean(log(fecundity_middleRange), na.rm = FALSE))),
+            FecundityMedian = round(median(fecundity_middleRange, na.rm = FALSE)),
+            n = n(),
+            FecunditySe = round(sd(fecundity_middleRange, na.rm = FALSE) / sqrt(n))
+  ) %>% 
+  mutate(Species = factor(Species, levels = fish %>% pull(latin_name))) %>% 
+  rename(latin_name = Species) %>% 
+  arrange(latin_name) 
+
+```
+
+### age ay first maturity
+```{r firstMaturity, include=FALSE}
+firstMaturity = maturity(fish %>% pull(latin_name)) %>% 
+  select(Species, Sex, AgeFirstMat_min = AgeMatMin, AgeFirstMatMax =  AgeMatMin2, Locality, Comment) %>% 
+  mutate(AgeFirstMat_min = as.numeric(AgeFirstMat_min), 
+         maturity_middleRange = (AgeFirstMat_min + AgeFirstMatMax) / 2 ) %>% 
+  drop_na(maturity_middleRange) %>%  
+  mutate(sexed = ifelse(Sex %in% c('male', 'female'), TRUE, FALSE)) %>% 
+  group_by(Species, Sex, sexed) %>% 
+  summarise(AgeFirstMatMean = mean(maturity_middleRange, na.rm = FALSE),
+            AgeFirstMatMedian = median(maturity_middleRange, na.rm = FALSE),
+            n = n(),
+            maturity_middleRangeSe = sd(maturity_middleRange, na.rm = FALSE) / sqrt(n),
+            .groups =  'drop'
+  ) %>% 
+  group_by(Species, sexed) %>% 
+  summarise(AgeFirstMatMean = round(mean(AgeFirstMatMean, na.rm = FALSE)),
+            n = sum(n), .groups =  'drop') %>% 
+  group_by(Species) %>% 
+  summarise(AgeFirstMatMean = mean(AgeFirstMatMean, na.rm = FALSE),
+            n = sum(n), .groups =  'drop') %>% 
+  mutate(Species = factor(Species, levels = fish %>% pull(latin_name))) %>% 
+  arrange(Species) %>% 
+  rename(latin_name = Species) 
+
+```
+### natural mortality
+```{r natural mortality, include=FALSE}
+
+# based on growth parameters
+popgrowth <- popgrowth(fish  %>% pull('latin_name')) %>% 
+  select(latin_name =Species,Loo, K, M, to, MethodM, Temperature ) %>% 
+  inner_join(firstMaturity %>% select(-n), by = 'latin_name') %>% 
+  # Gislason, H., Daan, N., Rice, J. C. & Pope, J. G. (2010) Size, growth, temperature and the natural mortality 
+  #   of marine fish. Fish and Fisheries 11, 149–158, doi:10.1111/j.1467-2979.2009.00350.x.
+  mutate(M_Gislason = exp(0.55 - 1.61 * log(Loo/.75) + 1.44 * log(Loo) + K)) %>% 
+  # Pauly, D. (1980) On the interrelationships between natural mortality, growth parameters, 
+  #   and mean environmental temperature in 175 fish stocks. Journal du Conseil International pour l’Exploration de la Mer 39, 175–192.
+  # T = 15 °C
+  mutate(M_Pauly = exp(-0.0066 - 0.279 * log(Loo) + 0.6543 * log(K) + 0.4636 * log(15))) %>% 
+  # Jensen, A. L. (1996) Beverton and Holt life history invariants result from optimal
+  #   trade-off of reproduction and survival. Canadian Journal of Fisheries and Aquatic Sciences 53, 820–822.
+  mutate(M_Jensen = 1.6 * K) %>% 
+  # Chen, S. & Watanabe, S. (1989) Age dependence of natural mortality coefficient in fish population dynamics. 
+  #   NIPPON SUISAN GAKKAISHI 55, 205–208, doi:10.2331/suisan.55.205.
+  # need to calculate annual mortality rate
+  mutate(M_Chen = K/(1-exp(-K*(AgeFirstMatMean - to)))) %>% 
+  group_by(latin_name) %>% 
+  summarise(across(.cols = everything(), 
+                   ~mean(.x, na.rm =TRUE))) %>% 
+  suppressWarnings()
+
+
+# based on population characteristics
+popchar <-  popchar(fish  %>% pull('latin_name')) %>% 
+  select(latin_name =Species, Lmax, tmax ) %>% 
+  mutate(across(-c(latin_name), ~as.numeric(.x))) %>% 
+  # Hoenig, J. M. (1983) Empirical use of longevity data to estimate mortality rates. 
+  #   Fisheries Bulletin 82, 898–903.
+  mutate(M_Hoenig = exp(1.46 - 1.01 *log(tmax))) %>% 
+  group_by(latin_name) %>% 
+  summarise(across(.cols = everything(), 
+                   ~mean(.x, na.rm =TRUE)),
+            .groups = 'drop')
+# merge
+fishbaseDerivedMortalty <- popgrowth %>% 
+  inner_join(popchar, by = 'latin_name') %>% 
+  inner_join(fecundity %>% select(latin_name, fecundity = FecundityMean),by = 'latin_name')  %>% 
+  select(latin_name, AgeFirstMatMean, fecundity,  M_Gislason, M_Pauly, M_Jensen, M_Hoenig, M_Chen) %>% 
+  mutate(across(-c(latin_name, AgeFirstMatMean, fecundity), 
+                ~exp(-.x*AgeFirstMatMean),
+                .names = "{sub('M_', 'survival1plus_', col)}")) %>% 
+  mutate(across(-c(latin_name, AgeFirstMatMean, fecundity, starts_with('M_')), 
+                ~1/(fecundity *.x) ,
+                .names = "{sub('survival1plus_', 'survival0_', col)}")) %>% 
+  mutate(survival_Gislason = survival0_Gislason * survival1plus_Gislason,
+         survival_Pauly = survival0_Pauly * survival1plus_Pauly,
+         survival_Jensen = survival0_Jensen * survival1plus_Jensen,
+         survival_Hoenig = survival0_Hoenig * survival1plus_Hoenig) %>% 
+  select(latin_name, starts_with('survival_')) %>% 
+  # mutate(across( starts_with('survival_'), ~formatC(.x, format = "e", digits = 2))) %>% 
+  mutate(latin_name = factor(latin_name, levels = fish %>% pull(latin_name))) %>% 
+  arrange(latin_name) %>% 
+  # join with estimates from the survey
+  inner_join(SurveyResult %>% 
+               filter(Question == 4) %>%
+               select(latin_name, survivalMean = mu_natural, survivalDown = dn_natural, SurvivalUp = up_natural) , by = 'latin_name') %>% 
+  select(latin_name, survival_Gislason, survivalMean ) %>% 
+  # calculta ration between Survey and Fisbas derived estimates
+  mutate(ratio = survivalMean/survival_Gislason)
+
+```
+# Maximum density of fish per unit area (Dmax, # km-2)
+```{r}
+SurveyResult %>% 
+  filter(Question == 2) %>% 
+  select(latin_name, Dmax = mu_natural, Dmax_dn = dn_natural, Dmax_up = up_natural ) %>% 
+  ggplot(aes(y = reorder(latin_name, Dmax), x = Dmax, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(xmin = Dmax_dn, xmax = Dmax_up)) +
+  ylab('Species') +
+  xlab('Maximum density of fish per unit area (# km-2)')
+```
+
+without flounder
+```{r}
+SurveyResult %>% 
+  filter(Question == 2, 
+         latin_name != 'Platichthys flesus') %>% 
+  select(latin_name, Dmax = mu_natural, Dmax_dn = dn_natural, Dmax_up = up_natural ) %>% 
+  ggplot(aes(y = reorder(latin_name, Dmax), x = Dmax, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(xmin = Dmax_dn, xmax = Dmax_up)) +
+  ylab('Species') +
+  xlab('Maximum density of fish per unit area (# km-2)')
+```
+
+Need to validate surface area from respondents with values from Eurodiad
+
+### Parameters table for HyDiaD
+```{r}
+HyDiaDParameter <- 
+  fish %>% inner_join(
+    SurveyResult %>% 
+      filter(Question == 2) %>% 
+      select(latin_name, Dmax = mu_natural) , by = 'latin_name')
+
+```
+
+
+# Allee effect (lambda)
+$lambda$ in Barber et al
+
+```{r}
+SurveyResult %>% 
+  filter(Question == 3) %>% 
+  select(latin_name, lambda = mu_natural, lambda_dn = dn_natural, lambda_up = up_natural ) %>% 
+  ggplot(aes(y = reorder(latin_name, lambda), x = lambda, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(xmin = lambda_dn, xmax = lambda_up)) +
+  ylab('Species') +
+  xlab('parameter for Allee affect')
+
+```
+
+### Parameters table for HyDiaD
+```{r}
+HyDiaDParameter <- HyDiaDParameter %>% 
+  left_join(
+    SurveyResult %>% 
+      filter(Question == 3) %>% 
+      select(latin_name, lambda = mu_natural), 
+    by = 'latin_name')   %>% 
+  # no Allee effect related to catchment size for Anguilla anguilla
+  mutate(lambda  = ifelse(latin_name == 'Anguilla anguilla', 0, lambda))  
+```
+
+# Spawner cohorts in reproduction 
+to define bins; how many age classes to use when defining annual spawner abundance
+
+```{r}
+nbCohorts <- fish %>% select(latin_name) %>% 
+  mutate(nbCohorts = 3) 
+nbCohorts %>%
+  flextable()
+```
+
+### Parameters table for HyDiaD
+```{r}
+HyDiaDParameter <- HyDiaDParameter %>% 
+  inner_join(nbCohorts, by = 'latin_name') 
+```
+
+
+# Mean age at first reproduction 
+define the time lag between when fish are produced and when they participate in reproduction
+```{r}
+firstMaturity %>% 
+  select(latin_name, AgeFirstMatMean) %>% 
+  flextable() %>% 
+  autofit()
+```
+
+```{r}
+firstMaturity %>% 
+  ggplot(aes(y = reorder(latin_name, AgeFirstMatMean), x = AgeFirstMatMean, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  ylab('Species') +
+  xlab('age at first maturity (year)')
+```
+
+### Parameters table for HyDiaD
+```{r}
+HyDiaDParameter <- HyDiaDParameter %>% 
+  inner_join(firstMaturity %>% 
+               select(latin_name, AgeFirstMat = AgeFirstMatMean), by = 'latin_name')
+
+```
+
+# Dispersion
+
+## Distance of straying
+We are interested in the distance that emigrants are likely to disperse between an origin catchment and a new destination catchment. For all species except eels, consider the destination catchment as a new freshwater spawning habitat for anadromous species and a new marine spawning habitat in close proximity to a catchment for catadromous species.
+
+### mean distance
+Question
+For all species except eels, what is the **mean distance** in km an emigrant is likely to disperse between its origin catchment and a new destination catchment? In other words, by what distance have approximately 50% of emigrants stopped dispersing?
+
+```{r}
+SurveyResult %>% 
+  filter(Question == 6)  %>% 
+  ggplot(aes(y = reorder(latin_name, mu), x = mu_natural, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(xmin = dn_natural, xmax = up_natural)) +
+  ylab('Species') +
+  xlab('mean distance (km)')
+```
+
+### maximal distance 
+For all species except eels, imagine there is a group of emigrants dispersing between an origin catchment and a set of new destination catchments. By what distance (in km) have the majority of emigrants found a destination catchment? We are not asking for the furthest distance that an individual of the species can travel. We are instead asking for the distance at which the majority of emigrants have stopped dispersing.
+
+
+```{r}
+SurveyResult %>% 
+  filter(Question == 7)  %>% 
+  ggplot(aes(y = reorder(latin_name, mu), x = mu_natural, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(xmin = dn_natural, xmax = up_natural)) +
+  ylab('Species') +
+  xlab('Maximal distance (km)')
+
+```
+
+```{r}
+SurveyResult %>% 
+  filter(Question %in% c(6,7)) %>%
+  select(Species, Question, mu_natural) %>% 
+  mutate(Question = case_when(Question==6  ~ "mean", Question== 7 ~ "max") ) %>% 
+  pivot_wider(names_from = Question, values_from = mu_natural ) %>% 
+  ggplot(aes(x = mean, y = max, label =Species)) +
+  geom_point() + geom_text(hjust = -0.1, nudge_x = 0.8)
+
+```
+
+
+### kernel function (alpha and beta)
+```{r}
+# the kernel function
+disperse = function(distance, alpha, beta){
+  return(exp(-alpha * (distance^beta)))
+}
+
+# integral of the kernel function (negative exponential)
+integralKernalFunction = function(distance, alpha, beta){
+  pPeudoInf = distance * pgamma( (distance^beta)*alpha, 1/beta)  / (beta * ((distance^beta * alpha)^(1 / beta)))
+}
+
+# compute the proportion  to settle before a distance
+settleBefore = function(distance, alpha, beta) {
+  # infinity is 10 000 km
+  pPeudoInf = integralKernalFunction(10000, alpha, beta)
+  res = integralKernalFunction(distance, alpha, beta) / pPeudoInf
+  res[distance == 0] = 0
+  return(res)
+}
+
+computeAlphaBeta = function(DistMean, DistMax, proportionBefore = c(.5, .9)) {
+  
+  dispersal = data.frame(distance = c(DistMean, DistMax), 
+                         proportionBefore = proportionBefore)
+  
+  # sum of squared error
+  SCE = function(par, obsDispersal){
+    return(sum((settleBefore(obsDispersal$distance, par[1], par[2]) - obsDispersal$proportionBefore)^2))
+  }
+  
+  SCE(par = c(0.06, .652), obsDispersal = dispersal)
+  sol = optim(c(0.06, .652), SCE, obsDispersal = dispersal)
+  sol$par
+  return(c(alpha = sol$par[1], beta = sol$par[2]))
+}
+
+kernelParameter <- SurveyResult %>% 
+  filter(Question %in% c(6,7)) %>%
+  select(Species, Question, mu_natural) %>% 
+  mutate(Question = case_when(Question==6  ~ "DistMean", Question== 7 ~ "DistMax") ) %>% 
+  pivot_wider(names_from = Question, values_from = mu_natural ) %>% 
+  #slice(1) %>% 
+  mutate(alpha = mapply(function(x,y) unname(computeAlphaBeta(x, y )['alpha']), DistMean, DistMax),
+         beta = mapply(function(x,y) unname(computeAlphaBeta(x, y )['beta']), DistMean, DistMax))
+
+kernels <- tibble()
+for (i in 1:nrow(kernelParameter)) {
+  kernels <-  kernels %>% 
+    bind_rows(tibble(Species = kernelParameter$Species[i], distance = seq(0,1000)) %>% 
+                mutate(kernelCurve = disperse(distance, 
+                                              kernelParameter$alpha[i],
+                                              kernelParameter$beta[i]) ))
+}
+
+kernels %>% 
+  inner_join(fish, by = c('Species' = 'name')) %>% 
+  arrange(latin_name) %>% 
+  ggplot(aes(x = distance, y = kernelCurve, col = latin_name, label = latin_name)) +
+  geom_path() 
+
+```
+
+#### Parameters table for HyDiaD
+```{r}
+HyDiaDParameter <- HyDiaDParameter %>% 
+  inner_join(kernelParameter, 
+             by = c('name' = 'Species'))
+```
+
+## Strayer survival (Sdisp et Mdisp)
+Question:
+Approximately what proportion (in %) of emigrants survive their journey to a new destination catchment (either freshwater catchment or marine habitat connected to catchment)?
+
+
+```{r}
+SurveyResult %>% 
+  filter(Question == 8)  %>% 
+  ggplot(aes(y = reorder(latin_name, mu), x = mu, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(xmin = dn_natural, xmax = up_natural)) +
+  ylab('Species') +
+  xlab('Strayer survival (%)')
+
+```
+
+In HyDiaD, the straying survival 
+*M_disp_* depends on the distance between departure and arrival catchments. So we considered that the survival from the survey corresponds to the the mean distance of straying.
+
+```{r}
+strayerSurvival <- SurveyResult %>% 
+  filter(Question == 8)  %>% 
+  select(latin_name, strayerSurvival = mu_natural) %>%
+  mutate(strayerSurvival = strayerSurvival / 100) %>% 
+  inner_join(SurveyResult %>% 
+               filter(Question == 6)  %>% 
+               select(latin_name, DistMean = mu_natural),
+             by = 'latin_name') %>% 
+  mutate(Mdisp = -log(strayerSurvival) / DistMean)
+
+strayerSurvival  %>%  
+  mutate(across(c(strayerSurvival, DistMean ), ~round(.x, 2)), 
+         Mdisp = round(Mdisp, 4)) %>% 
+  flextable() %>% 
+  autofit()
+
+```
+### Parameters table for HyDiaD
+```{r}
+# use Sdisp (Mdisp is calculated in HyDiaD function)
+HyDiaDParameter <- HyDiaDParameter %>% 
+  inner_join(strayerSurvival %>% 
+               select(latin_name, Sdisp = strayerSurvival, Mdisp), 
+             by = c('latin_name'))
+
+```
+
+## Straying rate (gamma)
+Question:
+For a group of juveniles leaving a catchment in a given year, what is the approximate proportion of emigrant fish (in %)? In other words, what percentage of fish will not return to spawn in their origin catchment? 
+
+$\gamma$ in Barber et al, y in Betsy's table.
+
+```{r}
+SurveyResult %>% 
+  filter(Question == 5)  %>% 
+  ggplot(aes(y = reorder(latin_name, mu_natural), x = mu_natural, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(xmin = dn_natural, xmax = up_natural)) + 
+  ylab('Species') +
+  xlab('Apparent straying rate (%)')
+
+
+```
+
+Since strayers can enter to their natal river. If homers include true homers (imprinted fish that return to the natal river and strayed homers (unimprinted fish that return randomly to the natal river). One can calculate the imprinting rate so that apparent straying rate equals value from the survey.
+
+```{r}
+apparentStrayingRate <- SurveyResult %>% 
+               filter(Question == 5) %>% 
+               select(Species , latin_name,
+                      apparentStrayingRate = mu_natural) %>% 
+  mutate(apparentStrayingRate = apparentStrayingRate /100 )
+```
+
+
+One can calculate the imprinting rate considering the theoretical kernel function
+```{r}
+imprinting <- HyDiaDParameter %>% 
+  inner_join(apparentStrayingRate,
+             by = "latin_name") %>% 
+  # proportion of strayers that migrate randomly to their natal river
+  mutate(strayedHomer = 1 / integralKernalFunction(10000, alpha, beta), 
+         unimprintingRate = apparentStrayingRate / (1 - strayedHomer) ,
+         imprintingRate = 1 - unimprintingRate) %>% 
+  select(latin_name, apparentStrayingRate, strayedHomer, unimprintingRate, imprintingRate)
+
+imprinting %>% 
+  mutate(across(-latin_name, ~round(.x,4))) %>% 
+  flextable()
+```
+
+### Parameters table for HyDiaD
+```{r}
+HyDiaDParameter <- HyDiaDParameter %>% 
+  inner_join(imprinting %>% 
+               select(latin_name, gamma = unimprintingRate), 
+             by = c('latin_name'))
+
+```
+
+
+It is possible to calculate an imprinting rate for all the species with the actual distance matrix. In that conditions (the nearest catchment is already far), only the origin basin is easily accessible so most strayers come back to the natal basin. Especially true for smelt which have as very restricted kernel.  
+
+```{r}
+expand_grid(outletDistance, 
+            HyDiaDParameter %>% 
+              select(latin_name, alpha, beta) ) %>% 
+  mutate(proportion =  exp(-alpha * distance ^ beta)) %>% 
+  group_by(latin_name, departure) %>% 
+  mutate(proportion = proportion / sum(proportion)) %>% 
+  filter(departure == arrival) %>% 
+  group_by(latin_name) %>% 
+  summarise(strayedHomer = mean(proportion))  %>% 
+  inner_join(apparentStrayingRate %>% select(-c(Species)),
+             by = "latin_name")  %>% 
+  mutate(unimprintingRate = apparentStrayingRate / (1 - strayedHomer), 
+         imprintingRate = 1 - unimprintingRate) %>%
+  mutate(across(-latin_name, ~round(.x,2))) %>% 
+  flextable()
+
+```
+
+
+If we use the previous value of imprinting rate we can compare the strayer rate from simulation
+
+```{r}
+expand_grid(outletDistance, HyDiaDParameter %>% 
+              select(latin_name, alpha, beta) ) %>% 
+  mutate(proportion =  exp(-alpha * distance ^ beta)) %>% 
+  group_by(latin_name, departure) %>% 
+  mutate(proportion = proportion / sum(proportion)) %>% 
+  filter(departure == arrival) %>% 
+  group_by(latin_name) %>% 
+  summarise(strayedHomer = mean(proportion)) %>% 
+  inner_join(imprinting %>% select(latin_name, apparentStrayingRate, imprintingRate ), by = "latin_name") %>% 
+  mutate(simulatedStrayingRate = (1 - imprintingRate) * (1 - strayedHomer)) %>%
+  select(latin_name, apparentStrayingRate, simulatedStrayingRate) %>% 
+  mutate(across(-latin_name, ~round(.x,2))) %>% 
+  flextable()
+```
+
+#### Impact of catchment topology
+```{r}
+rank_quantile <- outletDistance %>% 
+  arrange(departure, distance) %>% 
+  group_by(departure) %>% 
+  mutate(rank = rank(distance, ties.method = "first")) %>% 
+  filter(between(rank, 2,4)) %>% 
+  group_by(rank) %>% 
+  summarise(distance = quantile(distance, c(0.05, 0.1, 0.5)), q = c(0.05, 0.1, 0.5),
+            .groups = 'drop')  
+
+
+outletDistance %>% 
+  arrange(departure, distance) %>% 
+  group_by(departure, country, ecoregion_name) %>% 
+  mutate(rank = rank(distance, ties.method = "first")) %>% 
+  filter(between(rank, 2,4)) %>% 
+  group_by(rank, ecoregion_name)  %>% 
+  summarise(distance = quantile(distance, c(0.05, 0.1, 0.5)), q = c(0.05, 0.1, 0.5),
+            .groups = 'drop') %>% 
+  mutate(distance = round(distance, 1)) %>% 
+  pivot_wider(names_from = q, values_from = distance, names_prefix = 'q_' ) %>% 
+  flextable() %>% 
+  autofit()
+
+
+outletDistance %>% 
+  arrange(departure, distance) %>% 
+  group_by(departure) %>% 
+  mutate(rank = rank(distance, ties.method = "first")) %>% 
+  filter(between(rank, 2,4)) %>% 
+  ggplot() +
+  geom_histogram(aes(x = distance, fill = as.factor(rank)), bins = 30 ) + 
+  geom_vline( data = rank_quantile %>% filter(q == 0.05), 
+              aes(xintercept = distance, color = as.factor(rank) ), 
+              linetype="dashed")+
+  xlim(0,300) +
+  facet_grid(rank ~ .) %>% 
+  suppressWarnings()
+
+rank_quantile %>% 
+  pivot_wider(names_from = q, values_from = distance, names_prefix = 'q_' ) %>% 
+  flextable() %>% 
+  autofit()
+```
+
+```{r}
+SurveyResult %>% 
+  filter(Question %in% c(6,7)) %>%
+  select(Species, Question, mu_natural) %>% 
+  mutate(Question = case_when(Question==6  ~ "Dist_mean", Question== 7 ~ "Dist_max") ) %>% 
+  mutate(mu_natural = round(mu_natural, digits = 1)) %>% 
+  pivot_wider(names_from = Question, values_from = mu_natural ) %>% 
+  arrange(Dist_max) %>% 
+  flextable() %>% 
+  autofit()
+
+rank_quantile %>% 
+  mutate(distance = round(distance, digits = 1)) %>% 
+  pivot_wider(names_from = q, values_from = distance, names_prefix = 'q_' ) %>% 
+  flextable() %>% 
+  autofit()
+```
+
+
+# Population growth rate (r)
+
+## Fecundity
+
+```{r}
+fecundity %>% select(latin_name, FecundityMean, FecunditySe, n) %>% 
+  flextable::flextable() %>% 
+  autofit()
+```
+
+
+```{r}
+fecundity %>% 
+  ggplot(aes(y = reorder(latin_name, FecundityMean), x = FecundityMean, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(xmin = FecundityMean - FecunditySe, xmax = FecundityMean + FecunditySe)) +
+  scale_x_continuous(labels = function(x) format(x, scientific = TRUE))+
+  ylab('Species') 
+```
+
+## Survival from egg to adult
+
+```{r}
+SurveyResult %>% 
+  filter(Question == 4) %>%
+  mutate(across(c(mu_natural, dn_natural, up_natural), ~format(.x,  format = "e", digits = 2))) %>% 
+  select(latin_name, survivalMean = mu_natural, survivalDown = dn_natural, SurvivalUp = up_natural) %>% 
+  flextable::flextable() %>% 
+  flextable::autofit()
+```
+
+```{r}
+SurveyResult %>% 
+  filter(Question == 4) %>% 
+  ggplot(aes(y = reorder(latin_name, mu_natural), x = mu_natural, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(xmin = dn_natural, xmax = up_natural)) +
+  scale_x_continuous(labels = function(x) format(x, scientific = TRUE)) +
+  ylab('Species') +
+  xlab('Survival from egg to adult')
+
+```
+
+The comparison with mortalities calculated as the inverse of the fecundity (population at equilibrium, population growth rate = 1) shows optimistic values from the survey.
+```{r}
+fishbaseDerivedMortalty %>%
+  ggplot(aes(x = log10(survival_Gislason), y = log10(survivalMean))) +
+  xlab('Fishbase-related survival (log10 scale)')+
+  ylab('Survey-based survival (log10 scale)') +
+  geom_point() +
+  geom_text(aes( label = latin_name), hjust = -0.1) +
+  theme(aspect.ratio = 1) +
+  coord_equal(xlim = c(-6.5,-3),ylim = c(-6.5,-3))
+```
+
+
+## Population growth rate
+
+population growth rate, without taking into account anthropogenic mortality
+
+### from the survey
+```{r}
+r_data <-  SurveyResult %>% 
+  filter(Question == 4) %>% 
+  select( latin_name, SurvivalMean = mu_natural) %>% 
+  inner_join(fecundity %>% 
+               select(latin_name, FecundityMean ),
+             by = "latin_name") %>% 
+  # divide by to take into account male and female (suppose a sex ratio = .5 in spawning biomass)
+  mutate( r = (SurvivalMean * FecundityMean)/2)
+
+r_data %>% 
+  ggplot(aes(y = reorder(latin_name, r), x = r, fill = latin_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  ylab('Species') +
+  xlab('population growth rate')
+```
+
+```{r}
+r_data %>%
+  mutate(SurvivalMean = format(SurvivalMean, scientific = TRUE, digit = 2),
+         FecundityMean = format(FecundityMean, scientific = TRUE, digit = 2),
+         r = round(r, 2)) %>% 
+  flextable() %>% 
+  autofit()
+```
+
+### with a rescaling of survey results
+There is a possibility to rescale the *r* parameter between 1.2 and 2 after a log transformation... if you are enough naive to consider this calculation as relevant. 
+```{r}
+r_data <- r_data %>% 
+  mutate(scaled_r = exp(rescale(log(r), to = log(c(1.2, 2)))))
+r_data %>% 
+  ggplot(aes(x = r, y = scaled_r)) +
+  geom_point() +
+  geom_text(aes(label = latin_name), check_overlap = FALSE , hjust = 0, nudge_x = 0.2)
+```
+
+### from a literature review
+A population growth rate (*r*) of= 1 corresponds to a population at equilibrium (no changes in abundance). In pristine conditions (no anthropogenic mortalities), such a figure applied to all catchments, is the minimum value to avoid species extinction. In HyDiaD,  a little higher value should be considered  to compensate the strayers' mortality. A population growth rate of 2 leads to a population doubling in 1 year, which is likely the upper limit for the *r* parameter.
+
+Jaric et al. (2015) used a population growth rate  of `r round(exp(0.095), 2)`  for European sturgeon. The figure is based on the mean value of reported instantaneous population growth rates for other sturgeons species (ranging from 0.05 to 0.15) (Jaric and Guessner, 2013). For shads Jaric et al (2015) used a range for r between  `r round(exp(0.16),2)` and `r round(exp(0.50), 2)` based on the population doubling time reported in fishbase.
+
+k =`r round(exp(0.4),2)` for *Osmerus mordax* in Jensen 1984.
+
+### from population doubling
+```{r include=FALSE}
+# exp(log(2)/1.4)
+# log(2)/4.4
+# exp(log(2)/1)
+```
+
+### based on a population at equilibrium
+see a Jaric et al 2015 and Jensen 1984
+Wang et al 2017
+#### theoritically
+
+```{r}
+survivedStrayer = function(distance, alpha, beta, Mdisp){
+  unname(exp(-(alpha * distance ^ beta + Mdisp * distance)))
+}
+
+compute_r = function(alpha, beta, Mdisp, gamma) {
+  1/((1 - gamma) + gamma * integrate(survivedStrayer, 0, Inf, alpha, beta, Mdisp)$value / integrate(disperse, 0, Inf, alpha, beta)$value)
+}
+
+HyDiaDParameter %>% 
+  mutate(r = mapply(function(x,y, z, w) compute_r(x, y, z, w), alpha, beta, Mdisp, gamma)) %>% 
+  select(latin_name, alpha, beta, Mdisp, r) %>% 
+  mutate(across(-latin_name, ~ round(.x, 4))) %>% 
+  flextable() %>% 
+  autofit()
+
+```
+
+#### Parameters table for HyDiaD
+```{r}
+HyDiaDParameter <- HyDiaDParameter %>% 
+  mutate(r = mapply(function(x,y, z, w) compute_r(x, y, z, w), alpha, beta, Mdisp, gamma)) 
+```
+
+#### with actual catchment structure
+```{r}
+expand_grid(outletDistance %>% 
+              select(departure, arrival, distance), 
+            HyDiaDParameter %>% 
+              select(latin_name, gamma, alpha, beta, Mdisp)) %>% 
+  mutate(strayerProportion =   exp(-alpha * distance ^ beta)) %>% # kernel function
+  group_by(latin_name, departure) %>% 
+  mutate(strayerProportion = strayerProportion / sum(strayerProportion),
+         survivalStrayerProportion =  strayerProportion * exp(-Mdisp * distance)) %>% 
+  group_by(latin_name, departure, gamma) %>% 
+  summarise(survivalStrayerProportion = sum(survivalStrayerProportion), 
+            .groups = 'drop') %>% 
+  mutate(survicalProportion = (1 - gamma) + gamma * survivalStrayerProportion) %>% 
+  group_by(latin_name) %>% 
+  summarise(r = 1 / mean(survicalProportion)) 
+
+```
+
+# Others parameter for  HyDiad ( allee, strayedHomer)
+```{r}
+HyDiaDParameter <- HyDiaDParameter %>% 
+  mutate(withAllee = TRUE,
+         withNatalStray = TRUE,
+         UsePresence = FALSE)
+```
+
+#  Final parameters table for HyDiaD
+```{r include=FALSE}
+
+write_rds(HyDiaDParameter, './data_input/HyDiaDParameter.rds')
+# with default value as mean of the simulated value ( 1.1)
+write_rds(HyDiaDParameter %>% mutate(r = mean(r)), './data_input/HyDiaDParameter_default.rds')
+write_csv(HyDiaDParameter, './exportToDataBase/data_output/HyDiaDParameter.csv')
+
+# write in the folder for Interactive Web Atlas development
+write_rds(HyDiaDParameter, '/home/patrick/Documents/animation Equipe programme de recherche/Interreg DIADES/WP7/IWA/IWA_R/data_input/HyDiaDParameter.rds')
+
+```
+
+
+## Reference
+
+
+

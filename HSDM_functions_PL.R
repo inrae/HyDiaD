@@ -1,4 +1,4 @@
-## ---------------------------
+## --------------------------- #
 ##
 ## Script name: HyDiaD,  Hybrid Species Distribution Model for Diadromous fish
 ##
@@ -12,7 +12,7 @@
 ##
 ## Copyright (c) Betsy Barber, 
 ##               Patrick Lambert
-## Email: patrick.lambert@inrae.fr
+## Email: patrick.mh.lambert@inrae.fr
 ##
 ## This program is free software: you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -26,8 +26,8 @@
 ##
 ## You should have received a copy of the GNU General Public License
 ## along with this program.  If not, see <http://www.gnu.org/licenses/>.
-## ---------------------------
-##
+
+## ---------------------------#
 ## Notes: Must specify the following dataframes: 
 ##
 ## 1) Projected environmental predictor variables from 1951-2100
@@ -37,61 +37,62 @@
 ## 5) Species-specific parameters (as weighted means) from expert survey
 ## 6) Species-specific metaparameters from calibrated brtModel (simplified model)
 
-## ---------------------------
+## ---------------------------#
 
-## Clear the workspace:
-rm(list = ls())
-
-#### Section 1: Load the packages we will need:  ----
-
+# Section 1: Load the packages we will need:  ----
 library(gbm)
-#library(xlsx)
+
 library(readxl)
 library(dismo)
 library(tidyverse)
 
-#### Section 2: Load the data files that will be needed. ---------
-### set the working directory:
-#setwd("C:/Users/betsy.barber/Work Folders/Documents/HDSM/HSDM_Script_Full/HDSM_all_files/HSDM")
+## Clear the workspace:
+rm(list = ls())
 
-### 2.1. Environmental predictor variables:
-## Climate data from three climate models - df is projected monthly values from 1951-2100
-# WILL NEED TO UPDATE THESE DATAFRAMES WHEN THE FOURTH MODEL IS ADDED! 
-# Update pathway as needed; 
+# Section 2: Load the data files that will be needed. ---------
+
+# set the working directory:
+# setwd("C:/Users/betsy.barber/Work Folders/Documents/HDSM/HSDM_Script_Full/HDSM_all_files/HSDM")
+
+### 2.1. Environmental predictor variables: ----
+# Climate data from three climate models - df is projected monthly values from 1951-2100
+#   WILL NEED TO UPDATE THESE DATAFRAMES WHEN THE FOURTH MODEL IS ADDED! 
+#   Update pathway as needed; 
 rcp = 'rcp85'
-Enviro <- readRDS(paste0("data_input/Enviro_all_models_",rcp,".RDS"))
+Enviro <- read_rds(paste0("data_input/Enviro_all_models_",rcp,".RDS"))
 
+# Need 10-year average of environmental data (1901-1911) for the initial HSI predictions
+#  This is the saved df that has already been averaged; the script to perform the calculations is in folder "brt_calibration"
+Yr10_Ann <- read_rds("data_input/Yr10_Ann.RDS")
 
-## Need 10-year average of environmental data (1901-1911) for the initial HSI predictions
-# This is the saved df that has already been averaged; the script to perform the calculations is in folder "brt_calibration"
-Yr10_Ann <- readRDS("data_input/Yr10_Ann.RDS")
-
-### 2.2. Catchment-specific data:
+##  2.2. Catchment-specific data: ----
 ## Need the 'All_Basins' df that contains basin-specific data for all basins in EuroDiad v.4 
 # Update pathway as needed
-All_Basins <- readRDS("data_input/Info_All_Basins.RDS")
+All_Basins <- read_rds("data_input/Info_All_Basins.RDS")
 
 ## Need the 'outletDistanceMatrix' matrix that stores pairwise distances between all catchments in the Atlantic Area
 load("data_input/distanceMatrix15march.Rdata")
 
-### 2.3. Species-specific data:
+## 2.3. Species-specific data ----
 ## Need the 'Survey' df that stores the output from the expert survey for all 11 species
-# Variables from the survey or FishBase and are stored in excel file:
-Survey <- read_xlsx("data_input/Species_Parameters.xlsx", sheet = 1)
+# suffix = 'HyDiaD'
+# HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter.rds")
 
-## Set rownames to subset later
-# Survey <- read_xlsx("data_input/Species_Parameters.xlsx", sheet = 1) %>%  as.data.frame()
-# rownames(Survey) <- Survey$Lname
+suffix = 'Betsy'
+HyDiaDParameter <- read_rds("./data_input/BetsyParameter.rds")
+# 
+# suffix = 'default'
+# HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter_default.rds")
 
+# suffix = 'HyDiaD'
+# HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter.rds")
+
+## 2.4. Source BRT with species  ----
 ## For each species, need to source the R file storing the metaparameters for the calibrated brtModel
-Species_BRT <- read_xlsx("data_input/Species_BRT.xlsx", sheet = 1) 
-## Set rownames to subset later
-#rownames(Species_BRT) <- Species_BRT$Lname
+Species_BRT <- readxl::read_xlsx("data_input/Species_BRT.xlsx", sheet = 1) 
 
 
-#### Section 3: Prepare dataframes and parameters for use as input for model runs.---------------------------------
-
-### 3.1. Catchment-specific lists:
+# Section 3: Prepare dataframes and parameters for use as input for model runs.---------------------------------
 ## Subset distance matrix to remove rows and columns for "Altaelv" and "Tana" in Norway; we decided to exclude these catchments
 #TODO update the distanceMatrix, use as a longer tibble ?
 outletDistanceMatrix <- outletDistanceMatrix[!rownames(outletDistanceMatrix) %in% c("Altaelv", "Tana"),
@@ -99,101 +100,37 @@ outletDistanceMatrix <- outletDistanceMatrix[!rownames(outletDistanceMatrix) %in
 
 ## Create a list to store only the catchments in the Atlantic Area (as included in the distance matrix)
 # This is used in the functions below to subset the catchment-specific information
-# Convert distance matrix to dataframe, or won't work with tidy
-DF.df <- data.frame(outletDistanceMatrix)
- 
+# Convert distance matrix to dataframe,
+
+# DF.df <- data.frame(outletDistanceMatrix)
+DF.df <- outletDistanceMatrix %>%  
+  as_tibble(rownames = 'Basin_name') %>% 
+  arrange(Basin_name)
+
+# column_to_rownames('departure')
+
+
 ## Switch row names to column, then merge with basin dataframe to only include AA basins
 # Has to be merged by basin name instead of basin id b/c outlet name is what is defined in distance matrix
-AAbasins <- DF.df %>%
-  dplyr::select(sort(names(.))) %>%
-  rownames_to_column('Basin_name') %>%
-  dplyr::select('Basin_name')
+# AAbasins <- DF.df %>%
+#   dplyr::select(sort(names(.))) %>%
+#   rownames_to_column('Basin_name') %>%
+#   dplyr::select('Basin_name')
 
-### 3.2. Species-specific parameter lists:
-## Define the species
-# Species <- 'AAlosa'
-Species <- 'AFallax'
-## Define the corresponding calibrated brt 
-brtModel <- readRDS(paste0("brt/brt_output/", Species_BRT %>% filter(Lname == Species) %>% pull(BRT_RDS)))
+AAbasins <- DF.df %>% 
+  arrange(Basin_name) %>% 
+  dplyr::select(Basin_name)
+# Section 4: Build subfunctions to be used in simulations: -------------------------------
 
-
-## Optional: Can clear the workspace, but keep outside dfs that are needed
-#rm(list = setdiff(ls(), c('AAbasins', 'All_Basins', 'Enviro',
-#                         'outletDistanceMatrix', 'Survey', 'brtModel', 'Yr10_Ann')))
-
-## Define list of parameters to input for functions
-# First need to define which species is being tested 
-# in order to correctly subset the survey results
-Disp_parm <- list(
-  
-  ## Currently used in HSDM functions:
-  
-  ## Name of the current species
-  Lname =  Species,
-  ## 'Y' parameter from the survey (proportion of emigrants)
-  # Use recalibrated value "y2"
-  # (gamma in paper equations)
-  y = Survey %>% filter(Lname == Species) %>% pull(y2),
-  ## 'A' parameter from the survey (alpha = scale parameter for dispersal kernel)
-  # Use recalibrated value "alpha2"
-  a = Survey %>% filter(Lname == Species) %>% pull(alpha2),
-  ## 'B' parameter from the survey (beta = shape parameter for dispersal kernel)
-  # Use recalibrated value beta2
-  b = Survey %>% filter(Lname == Species) %>% pull(beta2), 
-  ## Lambda parameter from the survey (related to Allee effect)
-  lambda =  Survey %>% filter(Lname == Species) %>% pull(AveLambda),  
-  ## Max Density parameter from the survey (number of spawners per km2)
-  Dmax =  Survey %>% filter(Lname == Species) %>% pull(Dmax), 
-  ## 'R' parameter from the survey (population growth rate, without taking into account anthropogenic mortality)
-  r =  Survey %>% filter(Lname == Species) %>% pull(r), 
-  ## 'eh1' parameter from the survey; currently set to eh1 = 1 (anthropogenic mortality related to habitat degradation)
-  eh1 = exp(0),
-  ## 'eh2' parameter from the survey; currently set to eh2 = 1 (anthropogenic mortality related to fish e.g fishery)
-  eh2 = exp(0),
-  ## FSurv parameter from the survey (survival applied only to emigrants)
-  FSurv =  Survey %>% filter(Lname == Species) %>% pull(Fsurv),  
-  ## Set the timeperiod to run the model for
-  envYr = c(1951:2100),
-  ## Specify the average generation time for the species (yrs).
-  avAge = Survey %>% filter(Lname == Species) %>% pull(avAge), # Whole numbers and decimals accepted (ie: 2 or 2.5).
-  ## Specify the number of years to split offspring among (max < avAge*2).
-  bins = Survey %>% filter(Lname == Species) %>% pull(cohorts),
-  ## Specify the rcp from enviro
-  rcp = Enviro$Ann_Enviro_cn$rcp[1],
-  ## MeanDist parameter from the survey
-  MeanDist = Survey %>% filter(Lname == Species) %>% pull(MeanDist),
-  
-  ## Currently not used in functions (but could be varied for predict.gbm)
-  ## Kappa parameter from the survey
-  #kpa = Survey[Species, 'kpa'],
-  ## 'tc' parameter from the survey
-  #tc = Survey[Species, 'tc'],
-  ## 'lr' parameter from the survey
-  #lr = Survey[Species, 'lr'],
-  ## 'bf' parameter from the survey
-  #bf = Survey[Species, 'bf'],
-  
-  ### These need to be defined as 'yes' or 'no', or the functions will give a warning
-  ## They need to be lowercase, or will give a warning
-  ## Include an allee effect?
-  allee = 'yes', #'no',
-  ## Include "accidental" straying to natal catchment?
-  NatalStray = 'yes', #'no',
-  ## Use presence/absence data when initializing populations?
-  UsePresence = 'no' #'yes'
-  
-)
-
-#### Section 4: Read in the following functions: -------------------------------
-
-#### Step 1: Subset for the Atlantic Area basins and set initial values of HSI: ---------
+## Step 1: Subset for the Atlantic Area basins and set initial values of HSI: ---------
 
 FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
   ### First, set up dataframe with 10-year average of environ data from 1901-1911 and basin-specific data
   ## This is to predict the initial HSI for all basins in the AA
-  df10Ann <- All_Basins %>%  dplyr::select(c('basin_id', 'Surf', 'Length', 'Alt', 'Basin')) %>% 
+  df10Ann <- All_Basins %>%  
+    dplyr::select(c('basin_id', 'Surf', 'Length', 'Alt', 'Basin')) %>% 
     left_join(Yr10_Ann, by = 'basin_id')
-
+  
   ### Next, pull out information from calibrated brt (simplified model)
   pajoin <- brtModel$simplified_model$gbm.call$dataframe %>% 
     dplyr::select(basin_id, Basin_name = Basin.x, presence_absence = presence_absence) %>% 
@@ -222,11 +159,11 @@ FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
     HSIt1 = predictAA$HSIt1,
     presence_absence = predictAA$presence_absence,
     stringsAsFactors = FALSE
-    )
+  )
   
   ### Merge the initial HSI with other basin information
   basininfo <- basinbrt %>% inner_join(All_Basins,
-                          by = c('Basin_name' = 'Basin'))
+                                       by = c('Basin_name' = 'Basin'))
   
   ### Merge the basin info with AAbasins, keep all rows of AAbasins
   # InitProb <- merge(AAbasins, basininfo, by = 'Basin_name',
@@ -234,8 +171,9 @@ FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
   InitProb <- AAbasins %>% 
     left_join(basininfo,  by = 'Basin_name') %>%
     arrange(Basin_name)
-    
+  
   ### Filter out any rows with NA in the basin ID, basin name, initial HSI, or surface area 
+  #TODO replace filter_at with filter and across
   BasinInfo <- InitProb %>%
     filter_at(vars(c(basin_id, Basin_name, HSIt1, Surf)), all_vars(!is.na(.)))
   
@@ -246,11 +184,10 @@ FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
   return(BasinInfo)
 }
 
+## Step 2: Make sure that basins in distance matrix match basins in BasinInfo: --------------
 
-#### Step 2: Make sure that basins in distance matrix match basins in BasinInfo: --------------
-
-### Create a function to subset the distance matrix to the basins needed for this species
- ## (very important if each species has a different number of basins being included).
+### Create a function to subset the distance matrix to the basins needed for this species 
+## (very important if each species has a different number of basins being included).
 FUNdistmatrix <- function(BasinInfo, outletDistanceMatrix){
   ### Filter distance matrix to only include rows and columns for basins
   ## that are in the species abundance table for this species:
@@ -288,65 +225,49 @@ FUNdistmatrix <- function(BasinInfo, outletDistanceMatrix){
   return(dmUse)
 }
 
-#### Step 3: Create all dispersal matrices: -----------------------------------
-
-### Create a function to convert the estimated mean mortality during
-## dispersal between basins, to a mortality rate per km of dispersal
-## by dividing the log of mean survival by the mean dispersal distance.
-## (m is negative)
-FUNm <- function(FSurv, MeanDist) {
-  if (FSurv > 0 & MeanDist > 0) {
-    m = log(FSurv) / MeanDist
-  } else if (FSurv <= 0 & MeanDist > 0) {
-    m = log(0.001) / MeanDist
-  } else if (FSurv > 0 & MeanDist <= 0) {
-    m = log(FSurv) / 0.001
-  } else {
-    m = log(0.001) / 0.001
-  }
-  return(m)
-}
-
+## Step 3: Create all dispersal matrices: -----------------------------------
 
 ### Create a function to estimate the fraction of fish that survive
 ## disperal to another catchment based on the mortality rate per km.
 ## (m is negative)
-FUNsurvivalMatrix <- function(m, dmUse){
-  survivalMatrix = exp(m*dmUse)
+FUNsurvivalMatrix <- function(dmUse, Sdisp, DistMean){
+  ###  calculate mortality rate per km of dispersal
+  ## by dividing the minus of log of mean survival by the mean dispersal distance.
+  #TODO check pb of distance
+  if(FSurv > 0 & MeanDist > 0){
+    Msurv = - log(FSurv) / MeanDist
+  } else if(FSurv <= 0 & MeanDist > 0){
+    Msurv =  -log(0.001) / MeanDist
+  } else if(FSurv > 0 & MeanDist <= 0){
+    Msurv =  -log(FSurv) / 0.001
+  } else {
+    Msurv = - log(0.001) / 0.001
+  }
+  
+  survivalMatrix = exp(-Msurv * dmUse)
   return(survivalMatrix)
 }
 
-### Create a function to estimate the proportion of emmigrants from
+### Create a function to estimate the proportion of emigrants from
 ## each basin that will stray into each new catchment. The matrix is
 ## not expected to be symetrical.
-FUNexpMatrix <- function(a, b, dmUse, NatalStray){
-
+FUNemigrantMatrix <- function(dmUse, alpha, beta,  withNatalStray){
+  ### Calculate the relative fraction of fish that would return to each
+  ## basin 
   ### The dispersal matrix can be calculated with or without allowing fish
   ## to 'accidentally stray' into their natal basin (allow values for when l = j).
-  ## This is controlled by a yes/no statement (lowercase).
-  if(NatalStray == 'yes'){
-    ### Calculate the relative fraction of fish that would return to each
-    ## basin using the parameters "a" and "b" from the survey.
-    expMatrix2 <- exp(-a*(dmUse^b))
-    
-  }else if(NatalStray == 'no'){
-    ### Calculate the relative fraction of fish that would return to each
-    ## basin using the parameters "a" and "b" from the survey.
-    expMatrix2 <- exp(-a*(dmUse^b))
-    
+  
+  # calculate the weight of each catchment according to the kernal function
+  expMatrix2 <- exp(-alpha * (dmUse ^ beta))
+  
+  if (withNatalStray == FALSE) {
     ### This places a zero in the diagonal (l = j), so no fish
     ## 'accidentally stray' into their natal catchment
     diag(expMatrix2) <- 0
-    
-  }else{
-    ### Print a warning to alert the user.
-    print(paste("Warning! Natal Straying parameter must be yes/no"))
-    ### Create a NULL matrix of expMatrix2 to overwrite any existing value
-    expMatrix2 <- NULL
   }
   
   ### Divide all rows in a column of expMatrix2 by the sum of the column.
-  ## creates an absoulute dispersal fraction from the relative fractions.
+  ## creates a dispersal fraction from the catchment weight.
   expMatrix <- expMatrix2 / colSums(expMatrix2)
   
   ## If you want to check values/diagnostics, try these:
@@ -360,7 +281,7 @@ FUNexpMatrix <- function(a, b, dmUse, NatalStray){
   return(expMatrix)
 }
 
-#### Step 4: Create empty dataframes to hold data for a model run. --------------
+## Step 4: Create empty dataframes to hold data for a model run. --------------
 
 ### Create function to create empty fields for populations components
 ## for each climate model.
@@ -417,14 +338,14 @@ FUNdatafields <- function(BasinInfo, Disp_parm, dmUse){
   return(fields)
 }
 
-#### Step 5: Predict the HSI for the time series: ---------------------------
+## Step 5: Predict the HSI for the time series: ---------------------------
 
 ### Create a function to predict HSI for a given set of environmental data.
-FUNpredHSI <- function(x, BasinInfo, brtModel, Disp_parm, enviro){
+FUNpredHSI <- function(output, BasinInfo, brtModel, Disp_parm, enviro){
   
   ## For internal testing purposes:
   #enviro = Enviro$Ann_Enviro_cn
-  #x = fields
+  #output = fields
   
   ### Filter the environmental data for each climate model by the basins
   ## and years that are needed for this species.
@@ -434,19 +355,20 @@ FUNpredHSI <- function(x, BasinInfo, brtModel, Disp_parm, enviro){
     dplyr::filter(year %in% Disp_parm$envYr)
   
   ### merge dataframe to get environ data and basin data together
-  tempScen <- BasinInfo %>% dplyr::select(basin_id, Surf, Length, Alt, Basin_name, presence_absence) %>% 
+  tempScen <- BasinInfo %>% 
+    dplyr::select(basin_id, Surf, Length, Alt, Basin_name, presence_absence) %>% 
     left_join(tempEnv, by = 'basin_id') %>% 
     arrange(year, Basin_name)
   
   ### Internal check to be sure that the basin names are correct
-  if (all(tempScen$Basin_name != row.names(x$HSI))) {
+  if (all(tempScen$Basin_name != row.names(output$HSI))) {
     print(paste("Warning! Different basin names in",
                 "Environmental dataframe and distance matrix"))
   }
   
   ### Use the simplified model from brtModel in predict.gbm to get the
   ## fitted HSI values for each year.
-  x$HSI[unique(tempScen$Basin_name),
+  output$HSI[unique(tempScen$Basin_name),
         as.character(unique(tempScen$year))] <-
     matrix(
       predict.gbm(
@@ -460,89 +382,85 @@ FUNpredHSI <- function(x, BasinInfo, brtModel, Disp_parm, enviro){
     )
   
   ### Set the HSI for the initial years from the "BasinInfo" dataframe.
-  x$HSI[ ,grep('Initial', colnames(x$HSI))] <- BasinInfo$HSIt1
+  output$HSI[ ,grep('Initial', colnames(output$HSI))] <- BasinInfo$HSIt1
   ### Set the HSI for the burn-in years from the "BasinInfo" dataframe.
-  x$HSI[ ,grep('Burn', colnames(x$HSI))] <- BasinInfo$HSIt1
+  output$HSI[ ,grep('Burn', colnames(output$HSI))] <- BasinInfo$HSIt1
   
   ### Internal check that the HSI matrix is filled.
-  if(any(is.na(x$HSI))){
+  if(any(is.na(output$HSI))){
     print(paste('Warning! Some HSI values are NA'))
   }
   
   ## Return the dataset with the HSI matrix for the current climate model.
-  return(x)
+  return(output)
 }
 
-#### Step 6: Estimate the intial population size for each catchment. -----------
+## Step 6: Estimate the intial population size for each catchment. -----------
 
 ### This function creates initial populations for multiple year classes
 ## and calculates the initial population for each catchment, Nit.
-FUNinitNit <- function(x, BasinInfo, Disp_parm){
+FUNinitNit <- function(output, BasinInfo, Disp_parm){
   
   ### For internal check only:
-  #x <- Clim_mod$Ann_Enviro_cn
+  #output <- Clim_mod$Ann_Enviro_cn
   
   ### Check to see if populations should be limited by presence
   ## absence data.
-  if(Disp_parm$UsePresence == 'yes'){
+  output$Nit[,1] <- NA
+  
+  if(Disp_parm$UsePresence == TRUE){
     ### Estimate an initial population size for the first year.
-    x$Nit[,1] <-
-      x$HSI[,1] * Disp_parm$Dmax * BasinInfo$Surf * Disp_parm$eh1 *
+    output$Nit[,1] <-
+      output$HSI[,1] * Disp_parm$Dmax * BasinInfo$Surf * Disp_parm$eh1 *
       BasinInfo$presence_absence
     
-  } else if(Disp_parm$UsePresence == 'no'){
+  } else if(Disp_parm$UsePresence == FALSE){
     ### Estimate an initial population size for the first year.
-    x$Nit[,1] <-
-      x$HSI[,1] * Disp_parm$Dmax * BasinInfo$Surf * Disp_parm$eh1
-    
-  } else {
-    ## Parameter out of bounds. Return NAs to break the model.
-    print('Warning! Allee effect parameter is not yes/no')
-    ### Estimate an initial population size for the first year.
-    x$Nit[,1] <- NA
-  }
+    output$Nit[,1] <-
+      output$HSI[,1] * Disp_parm$Dmax * BasinInfo$Surf * Disp_parm$eh1
+  } 
   
-  ## Estimate inital populations for multiple year classes/bins.
+  ## Estimate initial populations for multiple year classes/bins.
   ## Check to see if the average age parameter is within bounds.
   if (is.numeric(Disp_parm$avAge) &
-     Disp_parm$avAge >= 1) {
+      Disp_parm$avAge >= 1) {
     
     ## Check to see if the bins parameter is within bounds.
     if (is.numeric(Disp_parm$bins) &
-       Disp_parm$bins >= 1 &
-       Disp_parm$bins < 2 * Disp_parm$avAge) {
+        Disp_parm$bins >= 1 &
+        Disp_parm$bins < 2 * Disp_parm$avAge) {
       
       ## Fill in an initial population for all the columns of a
       ## complete generation.
-      x$Nit[,colnames(x$Nit)[
+      output$Nit[,colnames(output$Nit)[
         1:floor(Disp_parm$avAge - (Disp_parm$bins / 2) +
-                  Disp_parm$bins)]] <- x$Nit[,1]
+                  Disp_parm$bins)]] <- output$Nit[,1]
       
     } else if (is.numeric(Disp_parm$bins) &
-              Disp_parm$bins >= 2 * Disp_parm$avAge) {
+               Disp_parm$bins >= 2 * Disp_parm$avAge) {
       ## Cohort parameter out of bounds. Return NAs to break the model.
       print('Warning! Bins parameter is too large')
       ### Estimate an initial population size for the first year.
-      x$Nit[,1] <- NA
+      output$Nit[,1] <- NA
     } else {
       ## Cohort parameter out of bounds. Return NAs to break the model.
       print('Warning! Bins parameter is out of bounds')
       ### Estimate an initial population size for the first year.
-      x$Nit[,1] <- NA
+      output$Nit[,1] <- NA
     }
   } else {
     ## Timestep parameter out of bounds. Return NAs to break the model.
     print('Warning! Timestep parameter is not >= 1')
     ### Estimate an initial population size for the first year.
-    x$Nit[,1] <- NA
+    output$Nit[,1] <- NA
   }
   
   ## Return the dataset with initial population values.
-  return(x)
+  return(output)
 }
 
 
-#### Step 7: Create lists for storing results for all models. ----------
+## Step 7: Create lists for storing results for all models. ----------
 
 ### Create a function to make lists of matrices for storing the
 ## results of each model run.
@@ -557,14 +475,15 @@ FUNparm <- function(Clim_mod, Disp_parm, DMCombo){
   )
   
   ### All character fields were converted to factors. Convert them back.
+  ##PL WHY
   Parameters[sapply(Parameters, is.factor)] <-
     lapply(Parameters[sapply(Parameters, is.factor)], as.character)
   
   ### Create a list for the results of projecting the population through
   ## the years. This will currently give a nested list, with all climate
   ## models run for each set of parameters.
-  Pop_results <- lapply(seq_along(row.names(Parameters)), FUN = function(x){
-    ### Create mostly empty maricies for populations.
+  Pop_results <- lapply(seq_along(row.names(Parameters)), function(x){
+    ### Create mostly empty matrices for populations.
     tempres <- Clim_mod
     ### Select a set of parameters to test
     tempres$ParmSet <- as.list(Parameters[x,])
@@ -573,13 +492,13 @@ FUNparm <- function(Clim_mod, Disp_parm, DMCombo){
     tempres$ParmSet$avAge <- Disp_parm$avAge
     tempres$ParmSet$bins <- Disp_parm$bins
     ### Include the Dispersal Matrix for the current paramenters.
-    ## using: "a", "b", "NatalStray", "FSurv", "MeanDist"
+    ## using: "alpha", "beta", "withNatalStray", "Sdisp", "DistMean"
     tempres$ParmSet$DispMatrix <-
-      DMCombo[[as.character(tempres$ParmSet$a)]][[
-        as.character(tempres$ParmSet$b)]][[
-          as.character(tempres$ParmSet$NatalStray)]][[
-            as.character(tempres$ParmSet$FSurv)]][[
-              as.character(tempres$ParmSet$MeanDist)]]
+      DMCombo[[as.character(tempres$ParmSet$alpha)]][[
+        as.character(tempres$ParmSet$beta)]][[
+          as.character(tempres$ParmSet$withNatalStray)]][[
+            as.character(tempres$ParmSet$Sdisp)]][[
+              as.character(tempres$ParmSet$DistMean)]]
     ### Return the result setup
     return(tempres)
   })
@@ -587,16 +506,16 @@ FUNparm <- function(Clim_mod, Disp_parm, DMCombo){
   return(Pop_results)
 }
 
-#### Step 8: Create a function to calculate population by time step. --------
+## Step 8: Create a function to calculate population by time step. --------
 
 ### Create a function to calculate the population components and
 ## matricies for a given time step.
 FUNpopCalc <- function(c, i, BasinInfo, parm){
   
   ## These are for internal testing purposes.
-  #c = Clim_mod$Ann_Enviro_cn
-  #parm <- Pop_results[[1]]$ParmSet
-  #i = floor(parm$avAge - (parm$bins / 2) + parm$bins + 1)
+  # c = Clim_mod$Ann_Enviro_cn
+  # parm <- Pop_results[[1]]$ParmSet
+  # i = floor(parm$avAge - (parm$bins / 2) + parm$bins + 1)
   
   ## Create a variable for the name of the column for the current year.
   yr = colnames(c$HSI)[i]
@@ -606,7 +525,7 @@ FUNpopCalc <- function(c, i, BasinInfo, parm){
   if (i > floor(parm$avAge - (parm$bins / 2) + parm$bins)) {
     prevgen = colnames(c$HSI)[
       i - rev(floor(parm$avAge - (parm$bins / 2) + 1:parm$bins))
-      ]
+    ]
   } else {
     ## i is out of bounds. Return NAs to break the model.
     print('Warning! value of i in the population loop is too small.')
@@ -621,31 +540,31 @@ FUNpopCalc <- function(c, i, BasinInfo, parm){
   ### Calculate the population from the "B" side of the
   ### equation for each basin.
   ## Calculate the number of emigrants from each basin.
-  c$Njy[,yr] <- rowSums(c$Nit[,prevgen] / parm$bins) * parm$y
+  c$Njy[,yr] <- rowSums(c$Nit[,prevgen] / parm$bins) * parm$gamma
   ## Calculate the number of immigrants to each basin.
   c$DNjy[,yr] <- t(c$Njy[,yr] %*% parm$DispMatrix)
   ## Calculate the number of fish returning to their natal basin.
-  c$B1[,yr] <- rowSums(c$Nit[,prevgen] / parm$bins) * (1 - parm$y)
+  c$B1[,yr] <- rowSums(c$Nit[,prevgen] / parm$bins) * (1 - parm$gamma)
   ## Sum up the total spawners in each basin.
   c$Bit[,yr] <- (c$DNjy[,yr] + c$B1[,yr]) * parm$eh2
   
-  ### Check if an allee effect should be used.
-  if(parm$allee == 'yes'){
+  ### Check if an Allee effect should be used.
+  if(parm$withAllee == TRUE){
     ## Calculate the max pop, according to population growth "B",
-    ## with an allee effect
+    ## with an Allee effect
     c$Min2[,yr] <- c$Bit[,yr] * parm$r *
       (c$Bit[,yr]^2 /
          (c$Bit[,yr]^2 +
             (parm$lambda * parm$Dmax * BasinInfo$Surf)^2))
     
-  } else if(parm$allee == 'no'){
+  } else if(parm$withAllee == FALSE){
     ## Calculate the max pop, according to population growth "B",
-    ## without an allee effect
+    ## without an Allee effect
     c$Min2[,yr] <- c$Bit[,yr] * parm$r
     
   } else {
     ## Parameter out of bounds. Return NAs to break the model.
-    print('Warning! Allee effect parameter is not yes/no')
+    print('Warning! Allee effect parameter is not TRUE/FALSE')
     c$Min2[,yr] <- NA
   }
   
@@ -660,78 +579,73 @@ FUNpopCalc <- function(c, i, BasinInfo, parm){
   return(c)
 }
 
-#### Step 9: Combine all of the smaller functions to calculate the populations and dispersal-------------
+## Step 9: Combine all functions to calculate the populations and dispersal-------------
 
-### Use all of the smaller function to calculate populations.
 dispersalFunc <- function(AAbasins, All_Basins, brtModel, Disp_parm,
                           Enviro, outletDistanceMatrix, Yr10_Ann){
-  #### Step 1: Create a list of the basins needed for this species: ------------
   
-  ### Create the Basin Info df from FUNbasininfo
+  ### Step 9.1: Create a list of the basins needed for this species ----
   BasinInfo <- FUNbasininfo(AAbasins = AAbasins,
                             All_Basins = All_Basins,
                             brtModel = brtModel,
                             Yr10_Ann = Yr10_Ann)
   
-  #### Step 2: Filter the distance matrix for this species: --------------------
-  
-  ### Create the distance matrix from FUNdistmatrix
+  ### Step 9.2: Create the distance matrix ----------------------------------------
   dmUse <- FUNdistmatrix(BasinInfo = BasinInfo,
                          outletDistanceMatrix = outletDistanceMatrix)
   
-  #### Step 3: Create all dispersal matricies: ---------------------------------
+  ### Step 9.3: Create all dispersal matricies: -----------------------------------
   
   ### Make a nested list to calculate expected dispersal matricies for
   ## the combinations of alpha, beta, and natal straying provided.
   ## For each alpha:
-  DMCombo <- lapply(seq_along(Disp_parm$a), FUN = function(A){
+  DMCombo <- lapply(seq_along(Disp_parm$alpha), function(i_alpha){
     ## For each beta:
-    tempb <- lapply(seq_along(Disp_parm$b), FUN = function(B){
+    tempb <- lapply(seq_along(Disp_parm$beta), function(i_beta){
       ## For each natal straying:
-      tempstray <- lapply(seq_along(Disp_parm$NatalStray), FUN = function(C){
+      tempstray <- lapply(seq_along(Disp_parm$withNatalStray), function(i_natalStray){
         ## Calculate and return a dispersal matrix.
-        tempexp <- FUNexpMatrix(a = Disp_parm$a[A],
-                                b = Disp_parm$b[B],
-                                dmUse = dmUse,
-                                NatalStray = Disp_parm$NatalStray[C])
-        ### Make a nested list to calculate survival matricies for the
+        tempexp <- FUNemigrantMatrix(dmUse = dmUse,
+                                      alpha = Disp_parm$alpha[i_alpha],
+                                      beta = Disp_parm$beta[i_beta],
+                                      withNatalStray = Disp_parm$withNatalStray[i_natalStray])
+        ### Make a nested list to calculate survival matrices for the
         ## combinations of survival and distances provided.
         ## For each mean survival:
-        tempcom <- lapply(seq_along(Disp_parm$FSurv), FUN = function(f){
+        tempcom <- lapply(seq_along(Disp_parm$Sdisp), function(i_Sdisp){
           ## For each mean distance:
-          tempf <- lapply(seq_along(Disp_parm$MeanDist), FUN = function(d){
-            ## Calculate mortality
-            tempm <- FUNm(FSurv = Disp_parm$FSurv[f],
-                          MeanDist = Disp_parm$MeanDist[d])
+          tempf <- lapply(seq_along(Disp_parm$DistMean), function(i_DistMean){
             ## Calculate a survival matrix
-            tempsur <- FUNsurvivalMatrix(m = tempm, dmUse = dmUse)
+            tempsur <- FUNsurvivalMatrix(dmUse = dmUse, 
+                                         Sdisp = Disp_parm$Sdisp[i_Sdisp],
+                                         DistMean = Disp_parm$DistMean[i_DistMean])
             ## Multiply element-wise the sxpMatrix and survival matricies.
             dm <- tempexp * tempsur
             ## Return the dispersal matrix
             return(dm)
           })
           ## Name the list of survival matricies by mean distance
-          names(tempf) <- Disp_parm$MeanDist
+          names(tempf) <- Disp_parm$DistMean
           ## Return the named list.
           return(tempf)
         })
         ## Name the list of matricies by mean survival
-        names(tempcom) <- Disp_parm$FSurv
+        names(tempcom) <- Disp_parm$Sdisp
         ## Return the named list.
         return(tempcom)
       })
       ## Name the list by natal straying.
-      names(tempstray) <- Disp_parm$NatalStray
+      names(tempstray) <- Disp_parm$withNatalStray
       ## Return the named list.
       return(tempstray)
     })
     ## Name the list by beta.
-    names(tempb) <- Disp_parm$b
+    names(tempb) <- Disp_parm$beta
     ## Return the named list.
     return(tempb)
   })
   ## Name the list by alpha.
-  names(DMCombo) <- Disp_parm$a
+  names(DMCombo) <- Disp_parm$alpha
   
   ### INTERNAL CHECK: When m is set to 0, DMCombo should be the exact
   ## same as expMatrix b/c all values in survivalMatrix are 1.
@@ -743,52 +657,41 @@ dispersalFunc <- function(AAbasins, All_Basins, brtModel, Disp_parm,
   ## independant of the number of emmigrants from that catchment.
   ## I.e: rowsums != colsums.
   
-  #### Step 4: Create dataframes to hold data for a model run. -----------------
-  
-  ### Create a set of empty fields for storing population components.
+  ### Step 9.4: Create empty dataframes to hold data for a model run: -----------------
   fields <- FUNdatafields(BasinInfo = BasinInfo,
                           Disp_parm = Disp_parm,
                           dmUse = dmUse)
   
   
-  #### Step 5: Predict the HSI for the time series: ----------------------------
-  
-  ### Use the HSI function to predict HSI for each climate model.
-  Clim_mod <- lapply(seq_along(Enviro), FUN = function(x){
-    tempHSI <- FUNpredHSI(x = fields,
+  ### Step 9.5: Predict the HSI for the time series for each climate model: ----------------------------
+  Clim_mod <- lapply(seq_along(Enviro), function(i_model){
+    tempHSI <- FUNpredHSI(output = fields,
                           BasinInfo = BasinInfo,
                           brtModel = brtModel,
                           Disp_parm = Disp_parm,
-                          enviro = Enviro[[x]])
-    
-    ## Return the dataset with the HSI matricies.
+                          enviro = Enviro[[i_model]])
     return(tempHSI)
   })
   ## Add names to the list.
   names(Clim_mod) <- names(Enviro)
   
-  
-  #### Step 6: Estimate the intial population size for each catchment. ---------
-  
-  ### Calculate the initial population for all the climate models.
-  Clim_mod <- lapply(Clim_mod, FUN = function(x){
-    FUNinitNit(x, BasinInfo = BasinInfo, Disp_parm = Disp_parm)
+  ### Step 9.6: Estimate the initial population size for each catchment and for  all the climate models. ---------
+  Clim_mod <- lapply(Clim_mod, function(x){
+    FUNinitNit(output = x, BasinInfo = BasinInfo, Disp_parm = Disp_parm)
   })
   
-  #### Step 7: Create lists for storing results for all models. ----------------
+  Clim_mod$Ann_Enviro_cn$Nit[,'Initial1']
+  ### Step 9.7: Create lists for storing results for all models. ----------------
   
-  ### Create empty results tables to store the models.
   Pop_results <- FUNparm(Clim_mod = Clim_mod,
                          Disp_parm = Disp_parm,
                          DMCombo = DMCombo)
   
-  #### Step 8+9: Run the FUNpopCalc function to calc poplulations.--------------
-  
-  ### Initialize a progress bar for keeping track of progress
+  ### Step 9.(8+9): Run the FUNpopCalc function to calculate populations.--------------
+  #### Initialize a progress bar for keeping track of progress
   progbar <- txtProgressBar(min = 1,
                             max = ncol(fields$HSI),
                             style = 3)
-  
   ### Run FUNpopcalc for the selected years.
   for(i in
       floor(Disp_parm$avAge - (Disp_parm$bins / 2) + Disp_parm$bins + 1):
@@ -800,15 +703,16 @@ dispersalFunc <- function(AAbasins, All_Basins, brtModel, Disp_parm,
     setTxtProgressBar(progbar, i)
     
     ## Name the object that the results of the loop will be stored in.
-    Pop_results <- lapply(Pop_results, FUN = function(x){
+    Pop_results <- lapply(Pop_results, function(x){
       
-      ## To try it manually:
+      ## To try it manually: 
       #x <- Pop_results[[1]]
+      # c <-  x[names(x)[names(x) %in% c('ParmSet') == FALSE]][[1]]
       
       ### Due the follow for all elements of the list except parameters
       x[names(x)[names(x) %in% c('ParmSet') == FALSE]] <-
         lapply(x[names(x)[names(x) %in% c('ParmSet') == FALSE]],
-               FUN = function(c){
+               function(c){
                  FUNpopCalc(c = c, i = i,
                             BasinInfo = BasinInfo,
                             parm = x$ParmSet)
@@ -858,24 +762,90 @@ dispersalFunc <- function(AAbasins, All_Basins, brtModel, Disp_parm,
 }
 
 
-#### Section 5: Run the whole function and view results. -------------------------
-
-### Code for running the whole function
-results <- dispersalFunc(AAbasins = AAbasins,
-                         All_Basins = All_Basins,
-                         brtModel = brtModel,
-                         Disp_parm = Disp_parm,
-                         Enviro = Enviro,
-                         outletDistanceMatrix = outletDistanceMatrix,
-                         Yr10_Ann = Yr10_Ann)
-
-## NOTE 1: When looking at the results, the first 6 columns (labelled "Initial1" - "Initial6")
-# SHOULD be NA for Njy, DNjy, B1, Bit, Min1, and Min2. It doesn't not mean the model isn't working. 
-# Calculated values should start appearing in all of these dataframes 
-# starting in column "Burn1"
-
-saveRDS(results, file = paste0("data_output/results_", Species,"_",rcp, ".RDS" ))
-
+## Section 5: Run the whole function and view results. -------------------------
+for (Species in HyDiaDParameter %>% pull(Lname)) {
+  print(Species)
+  ### Load the corresponding calibrated brt ----
+  brtModel <- read_rds(paste0("brt/brt_output/", 
+                              Species_BRT %>% 
+                                filter(Lname == Species) %>% 
+                                pull(BRT_RDS)))
+  
+  ## Optional: Can clear the workspace, but keep outside dfs that are needed
+  #rm(list = setdiff(ls(), c('AAbasins', 'All_Basins', 'Enviro',
+  #                         'outletDistanceMatrix', 'Survey', 'brtModel', 'Yr10_Ann')))
+  
+  ## Define list of parameters to input for functions ----
+  # First need to define which species is being tested 
+  # in order to correctly subset the survey results
+  Disp_parm <- list(
+    ## Currently not used in functions (but could be varied for predict.gbm)
+    ## Kappa parameter from the survey
+    #kpa = Survey[Species, 'kpa'],
+    ## 'tc' parameter from the survey
+    #tc = Survey[Species, 'tc'],
+    ## 'lr' parameter from the survey
+    #lr = Survey[Species, 'lr'],
+    ## 'bf' parameter from the survey
+    #bf = Survey[Species, 'bf'],
+    
+    ## Currently used in HSDM functions:
+    ## Name of the current species
+    Lname =  Species,
+    ## gamma = proportion of emigrants
+    gamma = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(gamma),
+    ## alpha = scale parameter for dispersal kernel  
+    alpha = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(alpha),
+    ## beta = shape parameter for dispersal kernel
+    beta = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(beta), 
+    ## Sdisp = survival applied only to emigrants
+    Sdisp =  HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(Sdisp),  
+    ## Dmax = Maximal Density (number of spawners per km2)
+    Dmax =  HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(Dmax), 
+    ## lambda parameter related to Allee effect
+    lambda =  HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(lambda),  
+    ## r = population growth rate, without taking into account anthropogenic mortality
+    r =  HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(r),
+    ## Specify the average generation time for the species (yrs).
+    avAge = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(AgeFirstMat), # Whole numbers and decimals accepted (ie: 2 or 2.5).
+    ## Specify the number of years to split offspring among (max < avAge*2).
+    bins = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(nbCohorts),
+    ## DistMean : mean distance of straying (km)
+    DistMean = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(DistMean),
+    
+    ## Specify the rcp from enviro
+    rcp = Enviro$Ann_Enviro_cn$rcp[1],
+    ## eh1 = anthropogenic mortality related to habitat degradation; currently set to  1 
+    eh1 = exp(0),
+    ## eh2 =  anthropogenic mortality related to fish (e.g fishery); currently set to 1
+    eh2 = exp(0),
+    ## Set the timeperiod to run the model for
+    envYr = c(1951:2100),
+    
+    ## Include an withAllee effect?
+    withAllee = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(withAllee),
+    ## Include "accidental" straying to natal catchment?
+    withNatalStray = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(withNatalStray),
+    ## Use presence/absence data when initializing populations?
+    UsePresence = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(UsePresence)
+  )
+  
+  ## Run the whole function ----
+  results <- dispersalFunc(AAbasins = AAbasins,
+                           All_Basins = All_Basins,
+                           brtModel = brtModel,
+                           Disp_parm = Disp_parm,
+                           Enviro = Enviro,
+                           outletDistanceMatrix = outletDistanceMatrix,
+                           Yr10_Ann = Yr10_Ann)
+  
+  ## NOTE 1: When looking at the results, the first 6 columns (labelled "Initial1" - "Initial6")
+  # SHOULD be NA for Njy, DNjy, B1, Bit, Min1, and Min2. It doesn't not mean the model isn't working. 
+  # Calculated values should start appearing in all of these dataframes 
+  # starting in column "Burn1"
+  
+  write_rds(results, file = paste0("data_output/", suffix, "Results_", Species,"_",rcp, ".RDS" ))
+}
 ## NOTE 2: Script to subset the results and create heatplots is in file "results_complexhp.R"
 
 
