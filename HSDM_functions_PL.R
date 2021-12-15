@@ -54,7 +54,20 @@ rm(list = ls())
 # set the working directory:
 # setwd("C:/Users/betsy.barber/Work Folders/Documents/HDSM/HSDM_Script_Full/HDSM_all_files/HSDM")
 
-### 2.1. Environmental predictor variables: ----
+## 2.1. Species-specific data ----
+## Need the 'Survey' df that stores the output from the expert survey for all 11 species
+
+suffix = 'HyDiaD'
+HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter.rds")
+
+# suffix = 'Betsy'
+# HyDiaDParameter <- read_rds("./data_input/BetsyParameter.rds")
+#
+# suffix = 'default'
+# HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter_default.rds")
+
+
+## 2.2. Environmental predictor variables: ----
 # Climate data from three climate models - df is projected monthly values from 1951-2100
 #   WILL NEED TO UPDATE THESE DATAFRAMES WHEN THE FOURTH MODEL IS ADDED! 
 #   Update pathway as needed; 
@@ -65,27 +78,13 @@ Enviro <- read_rds(paste0("data_input/Enviro_all_models_",rcp,".RDS"))
 #  This is the saved df that has already been averaged; the script to perform the calculations is in folder "brt_calibration"
 Yr10_Ann <- read_rds("data_input/Yr10_Ann.RDS")
 
-##  2.2. Catchment-specific data: ----
+##  2.3. Catchment-specific data: ----
 ## Need the 'All_Basins' df that contains basin-specific data for all basins in EuroDiad v.4 
 # Update pathway as needed
 All_Basins <- read_rds("data_input/Info_All_Basins.RDS")
 
 ## Need the 'outletDistanceMatrix' matrix that stores pairwise distances between all catchments in the Atlantic Area
 load("data_input/distanceMatrix15march.Rdata")
-
-## 2.3. Species-specific data ----
-## Need the 'Survey' df that stores the output from the expert survey for all 11 species
-# suffix = 'HyDiaD'
-# HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter.rds")
-
-suffix = 'Betsy'
-HyDiaDParameter <- read_rds("./data_input/BetsyParameter.rds")
-# 
-# suffix = 'default'
-# HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter_default.rds")
-
-# suffix = 'HyDiaD'
-# HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter.rds")
 
 ## 2.4. Source BRT with species  ----
 ## For each species, need to source the R file storing the metaparameters for the calibrated brtModel
@@ -120,67 +119,39 @@ DF.df <- outletDistanceMatrix %>%
 AAbasins <- DF.df %>% 
   arrange(Basin_name) %>% 
   dplyr::select(Basin_name)
+
+# AAbasins %>% anti_join(All_Basins, by = c("Basin_name" = "Basin"))
+
 # Section 4: Build subfunctions to be used in simulations: -------------------------------
 
 ## Step 1: Subset for the Atlantic Area basins and set initial values of HSI: ---------
 
 FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
-  ### First, set up dataframe with 10-year average of environ data from 1901-1911 and basin-specific data
-  ## This is to predict the initial HSI for all basins in the AA
-  df10Ann <- All_Basins %>%  
-    dplyr::select(c('basin_id', 'Surf', 'Length', 'Alt', 'Basin')) %>% 
-    left_join(Yr10_Ann, by = 'basin_id')
   
-  ### Next, pull out information from calibrated brt (simplified model)
-  pajoin <- brtModel$simplified_model$gbm.call$dataframe %>% 
-    dplyr::select(basin_id, Basin_name = Basin.x, presence_absence = presence_absence) %>% 
-    full_join(df10Ann, by = "basin_id")
-  
-  ### Subset to only Atlantic Area basins
-  tempdf <- pajoin %>%
-    filter(Basin %in% AAbasins$Basin_name) %>%
-    dplyr::select(-Basin_name) %>%
-    rename("Basin_name" = Basin)
-  
-  ### Predict HSI for t0 for all Atlantic Area basins
-  predictAA <- data.frame(
-    tempdf,
-    HSIt1 = predict.gbm(
-      brtModel$simplified_model,
-      tempdf,
+  BasinInfo <-  AAbasins %>% 
+    # add basin feature
+    inner_join(All_Basins,
+               by = c('Basin_name' = 'Basin')) %>% 
+    # add 10-year average of environ data from 1901-1911 
+    inner_join(Yr10_Ann, by = 'basin_id') %>% 
+    # add presence_absence information from calibrated brt (simplified model)
+    left_join(brtModel$simplified_model$gbm.call$dataframe %>% 
+                dplyr::select(basin_id, presence_absence),
+              by = 'basin_id') %>%
+    # replace presence_absence = NA by 0
+    replace_na(list(presence_absence = 0)) %>% 
+    # predict HSI for t0
+    mutate(HSIt1 = predict.gbm(
+      object = brtModel$simplified_model,
+      newdata = .,
       n.trees = brtModel$simplified_model$gbm.call$best.trees,
-      type = "response")
-  )
+      type = "response")) %>%
+    # sort by Basin_name
+    arrange(Basin_name) %>% 
+    # drop basin with missing HSIt1 and surf
+    drop_na(any_of(c("HSIt1", "Surf")))
+    
   
-  ### Combine information
-  basinbrt <- data.frame(
-    Basin_name = predictAA$Basin_name,
-    #basin_id = brtModel$simplified_model$gbm.call$dataframe$basin_id,
-    HSIt1 = predictAA$HSIt1,
-    presence_absence = predictAA$presence_absence,
-    stringsAsFactors = FALSE
-  )
-  
-  ### Merge the initial HSI with other basin information
-  basininfo <- basinbrt %>% inner_join(All_Basins,
-                                       by = c('Basin_name' = 'Basin'))
-  
-  ### Merge the basin info with AAbasins, keep all rows of AAbasins
-  # InitProb <- merge(AAbasins, basininfo, by = 'Basin_name',
-  #                   sort = TRUE, all.x = TRUE)
-  InitProb <- AAbasins %>% 
-    left_join(basininfo,  by = 'Basin_name') %>%
-    arrange(Basin_name)
-  
-  ### Filter out any rows with NA in the basin ID, basin name, initial HSI, or surface area 
-  #TODO replace filter_at with filter and across
-  BasinInfo <- InitProb %>%
-    filter_at(vars(c(basin_id, Basin_name, HSIt1, Surf)), all_vars(!is.na(.)))
-  
-  ### Select certain rows to make a smaller list (for testing purposes only).
-  #BasinInfo <- BasinInfo[which(BasinInfo$country== 'Spain'),]
-  
-  ### Return the BasinInfo df.
   return(BasinInfo)
 }
 
@@ -229,21 +200,27 @@ FUNdistmatrix <- function(BasinInfo, outletDistanceMatrix){
 
 ### Create a function to estimate the fraction of fish that survive
 ## disperal to another catchment based on the mortality rate per km.
-## (m is negative)
 FUNsurvivalMatrix <- function(dmUse, Sdisp, DistMean){
   ###  calculate mortality rate per km of dispersal
   ## by dividing the minus of log of mean survival by the mean dispersal distance.
-  #TODO check pb of distance
-  if(FSurv > 0 & MeanDist > 0){
-    Msurv = - log(FSurv) / MeanDist
-  } else if(FSurv <= 0 & MeanDist > 0){
-    Msurv =  -log(0.001) / MeanDist
-  } else if(FSurv > 0 & MeanDist <= 0){
-    Msurv =  -log(FSurv) / 0.001
+  
+  # if(Sdisp > 0 & DistMean > 0){
+  #   Msurv = - log(Sdisp) / DistMean
+  # } else if(Sdisp <= 0 & DistMean > 0){
+  #   Msurv =  -log(0.001) / DistMean
+  # } else if(Sdisp > 0 & DistMean <= 0){
+  #   Msurv =  -log(Sdisp) / 0.001
+  # } else {
+  #   Msurv = - log(0.001) / 0.001
+  # }
+  
+  if(Sdisp > 0 & DistMean > 0){
+    Msurv = -log(Sdisp) / DistMean
   } else {
-    Msurv = - log(0.001) / 0.001
+    Msurv = 0
   }
   
+  # survival matrix according to mortality coefficient and distances
   survivalMatrix = exp(-Msurv * dmUse)
   return(survivalMatrix)
 }
@@ -306,6 +283,7 @@ FUNdatafields <- function(BasinInfo, Disp_parm, dmUse){
     Disp_parm$envYr)
   
   ### Create and name a list of matricies for soring data during a model run.
+  #TODO simplify
   fields <- list(
     ## Matrix for annual HSI values
     HSI  = emptymat,
@@ -369,7 +347,7 @@ FUNpredHSI <- function(output, BasinInfo, brtModel, Disp_parm, enviro){
   ### Use the simplified model from brtModel in predict.gbm to get the
   ## fitted HSI values for each year.
   output$HSI[unique(tempScen$Basin_name),
-        as.character(unique(tempScen$year))] <-
+             as.character(unique(tempScen$year))] <-
     matrix(
       predict.gbm(
         brtModel$simplified_model,
@@ -404,11 +382,10 @@ FUNinitNit <- function(output, BasinInfo, Disp_parm){
   ### For internal check only:
   #output <- Clim_mod$Ann_Enviro_cn
   
+  output$Nit[,1] <- NA
   ### Check to see if populations should be limited by presence
   ## absence data.
-  output$Nit[,1] <- NA
-  
-  if(Disp_parm$UsePresence == TRUE){
+  if (Disp_parm$UsePresence == TRUE) {
     ### Estimate an initial population size for the first year.
     output$Nit[,1] <-
       output$HSI[,1] * Disp_parm$Dmax * BasinInfo$Surf * Disp_parm$eh1 *
@@ -422,24 +399,21 @@ FUNinitNit <- function(output, BasinInfo, Disp_parm){
   
   ## Estimate initial populations for multiple year classes/bins.
   ## Check to see if the average age parameter is within bounds.
-  if (is.numeric(Disp_parm$avAge) &
-      Disp_parm$avAge >= 1) {
+  if (Disp_parm$avAge >= 1) {
     
     ## Check to see if the bins parameter is within bounds.
-    if (is.numeric(Disp_parm$bins) &
-        Disp_parm$bins >= 1 &
+    if (Disp_parm$bins >= 1 &
         Disp_parm$bins < 2 * Disp_parm$avAge) {
       
       ## Fill in an initial population for all the columns of a
       ## complete generation.
-      output$Nit[,colnames(output$Nit)[
+      output$Nit[, colnames(output$Nit)[
         1:floor(Disp_parm$avAge - (Disp_parm$bins / 2) +
                   Disp_parm$bins)]] <- output$Nit[,1]
       
-    } else if (is.numeric(Disp_parm$bins) &
-               Disp_parm$bins >= 2 * Disp_parm$avAge) {
+    } else if (Disp_parm$bins >= 2 * Disp_parm$avAge) {
       ## Cohort parameter out of bounds. Return NAs to break the model.
-      print('Warning! Bins parameter is too large')
+      print('Warning! Bins parameter (number of cohorts) is too large according to age at first maturity ')
       ### Estimate an initial population size for the first year.
       output$Nit[,1] <- NA
     } else {
@@ -450,7 +424,7 @@ FUNinitNit <- function(output, BasinInfo, Disp_parm){
     }
   } else {
     ## Timestep parameter out of bounds. Return NAs to break the model.
-    print('Warning! Timestep parameter is not >= 1')
+    print('Warning! avAge (age at first maturity) parameter is not >= 1')
     ### Estimate an initial population size for the first year.
     output$Nit[,1] <- NA
   }
@@ -606,9 +580,9 @@ dispersalFunc <- function(AAbasins, All_Basins, brtModel, Disp_parm,
       tempstray <- lapply(seq_along(Disp_parm$withNatalStray), function(i_natalStray){
         ## Calculate and return a dispersal matrix.
         tempexp <- FUNemigrantMatrix(dmUse = dmUse,
-                                      alpha = Disp_parm$alpha[i_alpha],
-                                      beta = Disp_parm$beta[i_beta],
-                                      withNatalStray = Disp_parm$withNatalStray[i_natalStray])
+                                     alpha = Disp_parm$alpha[i_alpha],
+                                     beta = Disp_parm$beta[i_beta],
+                                     withNatalStray = Disp_parm$withNatalStray[i_natalStray])
         ### Make a nested list to calculate survival matrices for the
         ## combinations of survival and distances provided.
         ## For each mean survival:
@@ -677,8 +651,11 @@ dispersalFunc <- function(AAbasins, All_Basins, brtModel, Disp_parm,
   
   ### Step 9.6: Estimate the initial population size for each catchment and for  all the climate models. ---------
   Clim_mod <- lapply(Clim_mod, function(x){
-    FUNinitNit(output = x, BasinInfo = BasinInfo, Disp_parm = Disp_parm)
+    FUNinitNit(output = x, 
+               BasinInfo = BasinInfo, 
+               Disp_parm = Disp_parm)
   })
+  Clim_mod$Ann_Enviro_cn$HSI[,'Initial1']
   
   Clim_mod$Ann_Enviro_cn$Nit[,'Initial1']
   ### Step 9.7: Create lists for storing results for all models. ----------------

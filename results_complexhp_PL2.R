@@ -43,9 +43,22 @@ library(RColorBrewer) #Used for color scale for annotations
 #install_github("jokergoo/ComplexHeatmap")
 library(ComplexHeatmap)
 
-# 2. Clear workspace --------------------------
-rm(list=ls())
+# 2. prepare  workspace --------------------------
 
+## upload HyDiaDParameter and rcp --------------------------------------------------
+# rm(list = ls())
+ 
+# rcp = 'rcp85'
+ 
+# suffix = "Betsy"
+# HyDiaDParameter <-  read_rds('./data_input/BetsyParameter.rds')
+
+# suffix = "HyDiaD"
+# HyDiaDParameter <-  read_rds('./data_input/HyDiaDParameter.rds')
+
+
+
+## option memory -----
 # options(scipen = 6, digits = 4) # I prefer to view outputs in non-scientific notation
 # memory.limit(30000000)     # this is needed on some PCs to increase memory allowance, but has no impact on macs.
 
@@ -222,14 +235,6 @@ annotation = function(data, label){
 }
 
 # 4. Draw heat plots -----------------------------------------------
-## upload HyDiaDParameter and rcp --------------------------------------------------
-suffix = "Betsy"
-HyDiaDParameter <-  read_rds('./data_input/BetsyParameter.rds')
-
-# suffix = "HyDiaD"
-# HyDiaDParameter <-  read_rds('./data_input/HyDiaDParameter.rds')
-
-rcp = 'rcp85'
 
 ## loop over species --------------------------------------------------------------
 for (Species in HyDiaDParameter %>% pull(Lname)) {
