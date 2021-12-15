@@ -6,5 +6,11 @@
 .~*
 *.Rproj
 *.~*
-/data_ouput/
-/*.png
+/data_output/
+
+/survey/form
+
+/exportToDataBase/data_output
+
+
+
