@@ -46,49 +46,22 @@ library(ComplexHeatmap)
 ## ---------------------------
 rm(list=ls())
 
-options(scipen = 6, digits = 4) # I prefer to view outputs in non-scientific notation
-memory.limit(30000000)     # this is needed on some PCs to increase memory allowance, but has no impact on macs.
-
-## ---------------------------
-
-####Step 1: Organize results from running code in file "HSDM_functions" --------------------
-## Sourced functions and loaded datasets:
-# results <- readRDS("Alosa_rcp85_Jan2021.RDS")
-results <- readRDS("data_output/results_AAlosa_rcp85.RDS")
-#results <- readRDS("Alosa_rcp45_Jan2021.RDS")
-#results <- readRDS("Fallax_rcp85_Jan2021.RDS")
-#results <- readRDS("Fallax_rcp45_Jan2021.RDS")
-
-Species <- pluck(results, 1, 1, 'ParmSet', 'Lname')
-rcp <- pluck(results,1,1,'ParmSet', 'rcp')
+# options(scipen = 6, digits = 4) # I prefer to view outputs in non-scientific notation
+# memory.limit(30000000)     # this is needed on some PCs to increase memory allowance, but has no impact on macs.
 
 
 
-## Get basin information into a datafram
-## To rank, first list the order wanted for the countries
-## Then arrange by both country and latitude
-basin_area <- data.frame("Basin" = results[[2]]$Basin_name,
-                         "SA" = results[[2]]$Surf, 
-                         "Lat" = results[[2]]$Lat, 
-                         "Country" = results[[2]]$country,
-                         "Long" = results[[2]]$Long) %>% 
-  mutate(Country = factor(Country, 
-                          levels = rev(c("Morocco", "Portugal", "Spain", "France", 
-                                         "Germany", "England", "Wales", "Ireland", "Scotland",
-                                         "Denmark", "Sweden", "Norway") ))) %>% 
-  arrange(Country, desc(Lat)) 
 
 
 # ## Then define as a ranked vector for use later
-RankCL <- basin_area %>%
-  dplyr::select(Basin) %>%
-  unlist(use.names = FALSE)
+# basin_area <- basin_area %>%
+#   mutate(Basin = factor(Basin,
+#                         levels = basin_area %>%
+#                           pull(Basin)))
 
-basin_area <- basin_area %>% mutate(Basin = factor(Basin, levels = RankCL))
-rm(RankCL)
-
-
-
+# =======================================
+# local function 
+# ==========================================
 ### This function takes the df for each climate model and calculations saturation rate (SR) and density
 ## Results is df with SR, HSI, Density, and Nit for each catchment across all years
 FUNsubset <- function(results, model, basin_area){
@@ -127,22 +100,6 @@ FUNsubset <- function(results, model, basin_area){
            SRT = Nit / (Dmax * SA))
   return(SR)
 }
-
-### Subsets the data for each climate model using FUNsubset:
-SS_cs <- FUNsubset(results, 
-                   model = 'Ann_Enviro_cs', 
-                   basin_area = basin_area)
-SS_cn <- FUNsubset(results, 
-                   model = 'Ann_Enviro_cn', 
-                   basin_area = basin_area)
-SS_no <- FUNsubset(results, 
-                   model = 'Ann_Enviro_no', 
-                   basin_area = basin_area)
-
-
-#### Step 2: Arrange the df for each climate model and prepare it for use with Complexheatmap -----------------------------
-### This creates a figure that includes SR, Density, HSI and average abundance for one species and one rcp
-## First organize the data for the heatplots for each climate model:
 
 FUNlabel_color = function(data) {
   
@@ -189,12 +146,6 @@ FUNprep2 <- function(df){
               labs_use = label_color$labs_use))
 }
 
-## Run the funcion for each climate model
-Results_cn <- FUNprep2(df = SS_cn)
-Results_cs <- FUNprep2(SS_cs)
-Results_no <- FUNprep2(SS_no)
-
-
 ## Next calculate the average abundance from 1950-1980 for use in annotation for each climate model
 # This calculates a mean and max, but I only used the mean for the figures
 FUNanno <- function(data){
@@ -207,8 +158,52 @@ FUNanno <- function(data){
               MaxNit = max(c_across(X1951:X1980)))
   return(Mean_Nit)
 }
+ # ==================================================================
+## loop on species
+HyDiaDParameter <-  read_rds('./data_input/HyDiaDParameter.rds')
+rcp = 'rcp85'
+for (Species in HyDiaDParameter %>% pull(Lname)) 
+  
+  results <- read_rds(file = paste0("data_output/results_", Species,"_", rcp, ".RDS"))
 
-## Run the function for each climate model:
+## Get basin information into a datafram
+## To rank, first list the order wanted for the countries
+## Then arrange by both country and latitude
+basin_area <- tibble("Basin" = results[[2]]$Basin_name,
+                     "SA" = results[[2]]$Surf, 
+                     "Lat" = results[[2]]$Lat, 
+                     "Country" = results[[2]]$country,
+                     "Long" = results[[2]]$Long) %>% 
+  mutate(Country = factor(Country, 
+                          levels = rev(c("Morocco", "Portugal", "Spain", "France", 
+                                         "Germany", "England", "Wales", "Ireland", "Scotland",
+                                         "Denmark", "Sweden", "Norway") ))) %>% 
+  arrange(Country, desc(Lat)) %>% 
+  mutate(Basin = factor(Basin,
+                        levels = Basin))
+
+### Subsets the data for each climate model using FUNsubset:
+SS_cs <- FUNsubset(results, 
+                   model = 'Ann_Enviro_cs', 
+                   basin_area = basin_area)
+SS_cn <- FUNsubset(results, 
+                   model = 'Ann_Enviro_cn', 
+                   basin_area = basin_area)
+SS_no <- FUNsubset(results, 
+                   model = 'Ann_Enviro_no', 
+                   basin_area = basin_area)
+
+
+#### Step 2: Arrange the df for each climate model and prepare it for use with Complexheatmap -----------------------------
+### This creates a figure that includes SR, Density, HSI and average abundance for one species and one rcp
+## First organize the data for the heatplots for each climate model:
+
+## Run the funcion for each climate model
+Results_cn <- FUNprep2(df = SS_cn)
+Results_cs <- FUNprep2(SS_cs)
+Results_no <- FUNprep2(SS_no)
+
+## Run the function to calculate the average abundance from 1950-1980 for each climate model:
 Nit_cn <- FUNanno(data = Results_cn)
 Nit_cs <- FUNanno(data = Results_cs)
 Nit_no <- FUNanno(data = Results_no)
@@ -227,25 +222,7 @@ SS_ave <- SS_cn %>%
             AveNit = mean(Nit), 
             .groups = 'drop')  
 
-
-## Define a function to create a df for the average for each output type:
-FUNprepave <- function(data, target){
-  data_use <- data %>% 
-    dplyr::select(Basin, Year, target) %>% 
-    mutate(Year = as.numeric(Year)) %>% 
-    pivot_wider( id_cols = Basin, names_from = Year, values_from = target) %>% 
-    column_to_rownames('Basin') %>% 
-    as.matrix()
-  
-  label_color = FUNlabel_color(data)
-  
-  return(list(Ave_use = data_use, 
-              df_col = label_color$df_col, 
-              mat_colors = label_color$mat_colors, 
-              labs_use = label_color$labs_use))
-}
-
-## Run the function for Density, HSI, SR:
+## Run the function to create a df for the average for Density, HSI, SR:
 Ave_SR <- FUNprepave(SS_ave, 'AveSR')
 Ave_Den <- FUNprepave(SS_ave, 'AveDen')
 Ave_HSI <- FUNprepave(SS_ave, 'AveHSI')
@@ -377,7 +354,7 @@ dev.off()
 #### Heatplot for average of all three climate models: --------------------------
 ## Check the legend for spawner density first!!
 rm(ht_list_all)
-ht_list_no <- singleHeatmap(Ave_SR, 'Ave_use', "Saturation Rate", scale = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
+ht_list_all <- singleHeatmap(Ave_SR, 'Ave_use', "Saturation Rate", scale = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
   singleHeatmap(Ave_Den, 'Ave_use', "Density (fish/km2)",  scale = c(0, 1, 2, 3, 4, 5, 6, 7, 8)) +
   singleHeatmap(Ave_HSI, 'Ave_use', "Habitat Suitability", scale = c(0, 0.2, 0.4, 0.6, 0.8, 1),
                 rightAnnotation =   annotation(Mean_Nit$MeanNit, label = "Ave Abundance \n(1951-1980)"))
@@ -389,7 +366,7 @@ png(filename = paste0(Species, '_all_', rcp,'.png'),
     unit = "in",
     res = 300
 )
-draw(ht_list_no, heatmap_legend_side = "bottom")
+draw(ht_list_all, heatmap_legend_side = "bottom")
 dev.off()
 
 
