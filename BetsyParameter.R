@@ -19,7 +19,7 @@ BestyParameter <-  read_xlsx("./data_input/Species_Parameters.xlsx") %>%
           Mdisp = -log(Fsurv)/MeanDist,
           withAllee = TRUE,
           withNatalStray = TRUE,
-          UsePresence =  TRUE) %>% 
+          UsePresence =  FALSE) %>% 
   dplyr:: select(source, latin_name, Lname, name, Dmax, lambda = AveLambda, nbCohorts = cohorts,
                  AgeFirstMat = avAge, DistMean = MeanDist, DistMax,
                  alpha = alpha2, beta = beta2,
@@ -30,7 +30,7 @@ BestyParameter <-  read_xlsx("./data_input/Species_Parameters.xlsx") %>%
 
 BestyParameter %>%
   bind_rows(HyDiaDParameter) %>%
-  dplyr::select(-c(Lname, name)) %>%  
+  dplyr::select(-c(Lname, name, DistMax)) %>%  
   arrange(latin_name)
 
 write_rds(BestyParameter, './data_input/BetsyParameter.rds')
