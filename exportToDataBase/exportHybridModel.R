@@ -19,7 +19,7 @@ species <- read_csv("./exportToDataBase/species.csv") %>%
 #                   basin_name = character(), basin_id = integer(), year = integer(), 
 #                   Nit = double(), HSI = double(), saturation_rate = double(), stringsAsFactors = FALSE)
 data = tibble()
-for (filename in dir(path = "./data_output", pattern = 'results_')) {
+for (filename in dir(path = "./data_output", pattern = 'HyDiaDResults_')) {
   
   # load model outputs
   results <- read_rds(paste0("data_output/", filename))
