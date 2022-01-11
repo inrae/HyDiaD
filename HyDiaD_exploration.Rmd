@@ -1,0 +1,93 @@
+---
+date: "`r Sys.Date()`"
+author: "P.Lambert"
+title: "HyDiaD exploration"
+output: 
+  officedown::rdocx_document:
+    mapstyles:
+      Normal: ['First Paragraph']
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.cap = TRUE)
+library(officedown)
+library(officer)
+library(flextable)
+
+library(tidyverse)
+
+```
+
+```{r}
+rm(list =ls())
+HyDiaDParameter <- read_rds('./data_input/HyDiaDParameter.rds') %>% 
+  print(n = Inf)
+```
+
+# Stock-recruitment relationship
+
+```{r}
+prop_Sactive_fn = function(S_prime, lambda) {
+  S_prime^2 / (lambda^2 + S_prime^2)
+}
+
+SR_fn = function(S_prime, r, lambda) {
+  R_prime <- pmin(1, r * S_prime * prop_Sactive_fn(S_prime, lambda))
+  R_prime[S_prime == 0] = 0
+  return(R_prime)
+}
+
+SR_fn(S_prime = c(0, 0.5,1), lambda = 0.1, r=1.1)
+
+HyDiaDParameter %>% 
+  select(latin_name, lambda, r) %>% 
+  expand_grid(tibble(S_prime = seq(0, 1.5,.01))) %>% 
+  mutate(R_prime = SR_fn(S_prime = .$S_prime, r = .$r, lambda = .$lambda)) %>% 
+  ggplot() + 
+  geom_path(aes(x = S_prime, y = R_prime, color = latin_name))
+
+
+```
+
+## active spawners at full prodution of recruitment
+Some species have a percentage of active spawner lower than 99% at maximum production of recruitment (S_prime >= 1)
+```{r}
+HyDiaDParameter %>% 
+  select(latin_name, lambda) %>% 
+  expand_grid(tibble(S_prime = seq(0, 1.5,.01))) %>% 
+  mutate(S_prime_active = prop_Sactive_fn(.$S_prime,.$lambda)) %>% 
+  ggplot() + 
+  geom_path(aes(x = S_prime, y = S_prime_active, color = latin_name))
+
+
+lambda_up_fn = function(ratioActive = .99, Sref = 1){
+  Sref * sqrt((1 - ratioActive ) / ratioActive)
+} 
+
+HyDiaDParameter %>% 
+  select(latin_name, lambda) %>% 
+  mutate(lambda_up = round(lambda_up_fn(),3),
+         toHigh = lambda > lambda_up_fn(),
+         lambda = round(lambda,3)) %>% 
+  flextable()
+```
+
+## depensatory trap
+
+```{r}
+
+S_trap <-  lambda / sqrt(r - 1)
+
+tibble(S_prime = seq(0, 1.5,.01)) %>% 
+  mutate(R_prime = SR_fn(.$S_prime, r, lambda)) %>% 
+  ggplot() +
+  geom_path(aes(x = S_prime, y = R_prime )) +
+  geom_vline(xintercept = lambda / sqrt(r - 1), col = 'red',  lty = 2) +
+  geom_abline(slope = 1, intercept = 0, col = 'red')
+
+HyDiaDParameter %>% 
+  select(latin_name, lambda, r) %>% 
+  mutate(lambda_trap = lambda / sqrt(r - 1))
+
+```
+
