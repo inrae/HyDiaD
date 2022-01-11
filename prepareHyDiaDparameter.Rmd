@@ -17,7 +17,6 @@ library(flextable)
 library(rfishbase)
 library(scales)
 
-library(readr)
 library(readxl)
 library(tidyverse)
 ```
@@ -45,6 +44,10 @@ fish <- tibble(latin_name = c("Alosa alosa", "Alosa fallax",  "Lampetra fluviati
 
 fish <- fish %>% inner_join(speciesName, by = 'latin_name') %>% 
   select(-species_id)
+
+read_rds("./brt/brt_input/basinSpecies.RDS") %>% as_tibble()
+read_rds("./brt/brt_input/eurodiadAA.RDS") %>% as_tibble()
+read_rds("./brt/brt_input/calibrationSet.RDS") %>% as_tibble()
 ```
 
 ## Survey responses
@@ -884,6 +887,7 @@ k =`r round(exp(0.4),2)` for *Osmerus mordax* in Jensen 1984.
 ### based on a population at equilibrium
 see a Jaric et al 2015 and Jensen 1984
 Wang et al 2017
+
 #### theoritically
 
 ```{r}
