@@ -155,6 +155,8 @@ FUNbasininfo <- function(AAbasins, All_Basins, brtModel, Yr10_Ann){
   return(BasinInfo)
 }
 
+# test: BasinInfo <- FUNbasininfo(AAbasins, All_Basins, brtModel, Yr10_Ann)
+
 ## Step 2: Make sure that basins in distance matrix match basins in BasinInfo: --------------
 
 ### Create a function to subset the distance matrix to the basins needed for this species 
@@ -195,6 +197,9 @@ FUNdistmatrix <- function(BasinInfo, outletDistanceMatrix){
   ### Return the distance matrix.
   return(dmUse)
 }
+# to test
+# dmUse <- FUNdistmatrix(BasinInfo, outletDistanceMatrix)
+# dmUse['Aa', 1:10]
 
 ## Step 3: Create all dispersal matrices: -----------------------------------
 
@@ -214,7 +219,7 @@ FUNsurvivalMatrix <- function(dmUse, Sdisp, DistMean){
   #   Msurv = - log(0.001) / 0.001
   # }
   
-  if(Sdisp > 0 & DistMean > 0){
+  if (Sdisp > 0 & DistMean > 0) {
     Msurv = -log(Sdisp) / DistMean
   } else {
     Msurv = 0
@@ -258,6 +263,13 @@ FUNemigrantMatrix <- function(dmUse, alpha, beta,  withNatalStray){
   return(expMatrix)
 }
 
+# to test
+parameter <- HyDiaDParameter %>% filter(latin_name == 'Alosa alosa')
+FUNsurvivalMatrix(dmUse, Sdisp= parameter$Sdisp, DistMean = parameter$DistMean)['Aa', 1:10]
+FUNemigrantMatrix(dmUse, alpha =  parameter$alpha, 
+                  beta = parameter$beta, 
+                  withNatalStray = parameter$withNatalStray)['Aa', 1:10]
+  
 ## Step 4: Create empty dataframes to hold data for a model run. --------------
 
 ### Create function to create empty fields for populations components
@@ -483,7 +495,7 @@ FUNparm <- function(Clim_mod, Disp_parm, DMCombo){
 ## Step 8: Create a function to calculate population by time step. --------
 
 ### Create a function to calculate the population components and
-## matricies for a given time step.
+## matrices for a given time step.
 FUNpopCalc <- function(c, i, BasinInfo, parm){
   
   ## These are for internal testing purposes.
@@ -670,9 +682,9 @@ dispersalFunc <- function(AAbasins, All_Basins, brtModel, Disp_parm,
                             max = ncol(fields$HSI),
                             style = 3)
   ### Run FUNpopcalc for the selected years.
-  for(i in
-      floor(Disp_parm$avAge - (Disp_parm$bins / 2) + Disp_parm$bins + 1):
-      ncol(fields$HSI)){
+  for (i in
+      floor(Disp_parm$avAge - (Disp_parm$bins / 2) + Disp_parm$bins + 1) :
+      ncol(fields$HSI)) {
     
     ## To run the population function for all combinations for a single year:
     #i = 1950
