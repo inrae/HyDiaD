@@ -8,7 +8,7 @@
 ## Author: Dr. Betsy Barber, 
 ##  Modified by Patrick Lambert
 ## Date Created: 2020-09-21
-## Date Updated: 2021-05-20
+## Date Updated: 2022-02-02
 ##
 ## Copyright (c) Betsy Barber, 
 ##               Patrick Lambert
@@ -57,14 +57,8 @@ rm(list = ls())
 ## 2.1. Species-specific data ----
 ## Need the 'Survey' df that stores the output from the expert survey for all 11 species
 
-suffix = 'HyDiaD'
-HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter.rds")
-
-# suffix = 'Betsy'
-# HyDiaDParameter <- read_rds("./data_input/BetsyParameter.rds")
-#
-# suffix = 'default'
-# HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter_default.rds")
+suffix = 'Betsy'
+HyDiaDParameter <- read_rds("./data_input/BetsyParameter.rds")
 
 
 ## 2.2. Environmental predictor variables: ----

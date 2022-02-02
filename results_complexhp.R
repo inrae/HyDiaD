@@ -8,8 +8,14 @@
 #
 # Date Created: 2021-01-20
 #
-# Copyright (c) Dr. Betsy Barber, 2021
-# Email: betsy.barber@maine.edu
+## Author: Dr. Betsy Barber, 
+##  Modified by Patrick Lambert
+## Date Created: 2020-09-21
+## Date Updated: 2022-02-02
+##
+## Copyright (c) Betsy Barber, 
+##               Patrick Lambert
+## Email: patrick.mh.lambert@inrae.fr
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -48,14 +54,10 @@ library(ComplexHeatmap)
 ## upload HyDiaDParameter and rcp --------------------------------------------------
 # rm(list = ls())
  
-# rcp = 'rcp85'
+rcp = 'rcp85'
  
-# suffix = "Betsy"
-# HyDiaDParameter <-  read_rds('./data_input/BetsyParameter.rds')
-
-# suffix = "HyDiaD"
-# HyDiaDParameter <-  read_rds('./data_input/HyDiaDParameter.rds')
-
+suffix = "Betsy"
+HyDiaDParameter <-  read_rds('./data_input/BetsyParameter.rds')
 
 
 ## option memory -----
@@ -363,244 +365,3 @@ for (Species in HyDiaDParameter %>% pull(Lname)) {
   dev.off()
 }
 
-
-# 
-# #### Step 4: Create histograms for HSI and density
-# ## Use All_Den and All_HSI, but can put in long format and then count the number in each bin
-# ## For A. fallax:
-# Density45 <- All_Den %>%
-#   select(-contains("Burn")) %>%
-#   select(-contains("Initial")) %>%
-#   gather(key = "Year", value = "Den", 4:153)
-# 
-# HSI45 <- All_HSI %>%
-#   select(-contains("Burn")) %>%
-#   select(-contains("Initial")) %>%
-#   gather(key = "Year", value = "HSI", 4:153)
-# 
-# Hist_data45 <- inner_join(Density45, HSI45, by = c("Basin", "Country", "Year"))
-# yrs1 = seq(from = 1980, to = 2010, by = 1)
-# yrs2 = seq(from = 2070, to = 2100, by = 1)
-# #yrs = c(yrs1, yrs2)
-# Hist_data45$Country = factor(Hist_data45$Country, levels = c("Norway", "Sweden", "Denmark", "Scotland",
-#                                                              "Ireland", "Wales", "England", "Germany", "France",
-#                                                              "Spain", "Portugal", "Morocco"))
-# 
-# #Hist_data1 <- Hist_data %>%
-# #  select(-Lat.x, -Lat.y) %>%
-# #  filter(Year %in% yrs1)
-# #Hist_data2 <- Hist_data %>%
-# #  select(-Lat.x, -Lat.y) %>%
-# #  filter(Year %in% yrs2)
-# 
-# Time_data45 <- Hist_data45 %>%
-#   select(-Lat.x, -Lat.y) %>%
-#   filter(Year %in% yrs) %>%
-#   mutate(Per = case_when(
-#     Year %in% yrs1 ~ "F",
-#     Year %in% yrs2 ~ "L"
-#   )) %>%
-#   mutate(rcp = "45")
-# 
-# Density85 <- All_Den %>%
-#   select(-contains("Burn")) %>%
-#   select(-contains("Initial")) %>%
-#   gather(key = "Year", value = "Den", 4:153)
-# 
-# HSI85 <- All_HSI %>%
-#   select(-contains("Burn")) %>%
-#   select(-contains("Initial")) %>%
-#   gather(key = "Year", value = "HSI", 4:153)
-# 
-# Hist_data85 <- inner_join(Density85, HSI45, by = c("Basin", "Country", "Year"))
-# Hist_data85$Country = factor(Hist_data85$Country, levels = c("Norway", "Sweden", "Denmark", "Scotland",
-#                                                              "Ireland", "Wales", "England", "Germany", "France",
-#                                                              "Spain", "Portugal", "Morocco"))
-# 
-# Time_data85 <- Hist_data85 %>%
-#   select(-Lat.x, -Lat.y) %>%
-#   filter(Year %in% yrs) %>%
-#   mutate(Per = case_when(
-#     Year %in% yrs1 ~ "F",
-#     Year %in% yrs2 ~ "L"
-#   )) %>%
-#   mutate(rcp = "85")
-# 
-# All_Time2 <- bind_rows(Time_data45, Time_data85)
-# All_Time_F <- All_Time2 %>%
-#   unite(TimeRcp, Per:rcp, sep = "") %>%
-#   mutate(Spp = "A.fallax")
-# saveRDS(All_Time_F, file = "Afallax_all_density_plots.RDS") 
-# 
-# ## For A. alosa:
-# Density45 <- All_Den %>%
-#   select(-contains("Burn")) %>%
-#   select(-contains("Initial")) %>%
-#   gather(key = "Year", value = "Den", 4:153)
-# 
-# HSI45 <- All_HSI %>%
-#   select(-contains("Burn")) %>%
-#   select(-contains("Initial")) %>%
-#   gather(key = "Year", value = "HSI", 4:153)
-# 
-# Hist_data45 <- inner_join(Density45, HSI45, by = c("Basin", "Country", "Year"))
-# yrs1 = seq(from = 1980, to = 2010, by = 1)
-# yrs2 = seq(from = 2070, to = 2100, by = 1)
-# yrs = c(yrs1, yrs2)
-# Hist_data45$Country = factor(Hist_data45$Country, levels = c("Norway", "Sweden", "Denmark", "Scotland",
-#                                                              "Ireland", "Wales", "England", "Germany", "France",
-#                                                              "Spain", "Portugal", "Morocco"))
-# 
-# 
-# Time_data45 <- Hist_data45 %>%
-#   select(-Lat.x, -Lat.y) %>%
-#   filter(Year %in% yrs) %>%
-#   mutate(Per = case_when(
-#     Year %in% yrs1 ~ "F",
-#     Year %in% yrs2 ~ "L"
-#   )) %>%
-#   mutate(rcp = "45")
-# 
-# Density85 <- All_Den %>%
-#   select(-contains("Burn")) %>%
-#   select(-contains("Initial")) %>%
-#   gather(key = "Year", value = "Den", 4:153)
-# 
-# HSI85 <- All_HSI %>%
-#   select(-contains("Burn")) %>%
-#   select(-contains("Initial")) %>%
-#   gather(key = "Year", value = "HSI", 4:153)
-# 
-# Hist_data85 <- inner_join(Density85, HSI45, by = c("Basin", "Country", "Year"))
-# Hist_data85$Country = factor(Hist_data85$Country, levels = c("Norway", "Sweden", "Denmark", "Scotland",
-#                                                              "Ireland", "Wales", "England", "Germany", "France",
-#                                                              "Spain", "Portugal", "Morocco"))
-# 
-# Time_data85 <- Hist_data85 %>%
-#   select(-Lat.x, -Lat.y) %>%
-#   filter(Year %in% yrs) %>%
-#   mutate(Per = case_when(
-#     Year %in% yrs1 ~ "F",
-#     Year %in% yrs2 ~ "L"
-#   )) %>%
-#   mutate(rcp = "85")
-# 
-# All_Time2 <- bind_rows(Time_data45, Time_data85)
-# All_Time_A <- All_Time2 %>%
-#   unite(TimeRcp, Per:rcp, sep = "") %>%
-#   mutate(Spp = "A.alosa")
-# saveRDS(All_Time_A, file = "Alosa_all_density_plots.RDS") 
-# 
-# ## Now combine the two dataframes into 1:
-# All_Time_F <- readRDS("Afallax_all_density_plots.RDS")
-# All_Time_A <- readRDS("Alosa_all_density_plots.RDS")
-# 
-# All_Time <- bind_rows(All_Time_A, All_Time_F)
-# 
-# ggplot(data = All_Time, aes(x = Den, after_stat(count), fill = TimeRcp, color = TimeRcp)) +
-#   geom_density(alpha = 0.2, lwd = 1) +
-#   scale_color_manual(values = viridis(4),
-#                      name = "Category"#,
-#                      #labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                      #         "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")
-#   ) +
-#   scale_fill_manual(values = viridis(4), 
-#                     name = "Category",
-#                     labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                                "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")) +
-#   theme_classic() +
-#   xlab("Spawner Density (fish/km2)") + ylab("Count") + ggtitle("Spawner Density")
-# 
-# ggplot(data = All_Time, aes(x = HSI, after_stat(count), fill = TimeRcp, color = TimeRcp)) +
-#   geom_density(alpha = 0.2, lwd = 1) +
-#   scale_color_manual(values = viridis(4),
-#                      name = "Category",
-#                      labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                                 "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")) +
-#   scale_fill_manual(values = viridis(4), 
-#                     name = "Category",
-#                     labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                                "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")) +
-#   theme_classic() +
-#   xlab("HSI") + ylab("Count") + ggtitle("Habitat Suitability")
-# 
-# 
-# #### Use these ones:
-# png(filename = "Shads_density_histogram_Jan21.png",
-#     width = 9,
-#     height = 4,
-#     unit = "in",
-#     res = 300
-# )
-# ggplot(data = All_Time, aes(x = Den, after_stat(count), fill = TimeRcp, color = TimeRcp)) +
-#   facet_wrap(~Spp, scales = "free_x") +
-#   geom_density(alpha = 0.2, lwd = 1) +
-#   scale_color_manual(values = viridis(4),
-#                      name = "Category",
-#                      labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                                 "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")) +
-#   scale_fill_manual(values = viridis(4), 
-#                     name = "Category",
-#                     labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                                "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")) +
-#   theme_classic() +
-#   xlab("Spawner Density (fish/km2)") + ylab("Count") + ggtitle("Spawner Density")
-# dev.off()
-# 
-# png(filename = "Shads_HSI_histogram_Jan21.png",
-#     width = 10,
-#     height = 4,
-#     unit = "in",
-#     res = 300
-# )
-# ggplot(data = All_Time, aes(x = HSI, after_stat(count), fill = TimeRcp, color = TimeRcp)) +
-#   facet_wrap(~Spp) +
-#   geom_density(alpha = 0.2, lwd = 1) +
-#   scale_color_manual(values = viridis(4),
-#                      name = "Category",
-#                      labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                                 "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")) +
-#   scale_fill_manual(values = viridis(4), 
-#                     name = "Category",
-#                     labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                                "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")) +
-#   theme_classic() +
-#   xlab("HSI") + ylab("Count") + ggtitle("Habitat Suitability")
-# dev.off()
-# 
-# 
-# ggplot(data = All_Time_A, aes(x = HSI, after_stat(count), fill = TimeRcp, color = TimeRcp)) +
-#   facet_wrap(~Spp) +
-#   geom_density(alpha = 0.2, lwd = 1) #+
-# scale_color_manual(values = viridis(4),
-#                    name = "Category",
-#                    labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                               "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")) +
-#   scale_fill_manual(values = viridis(4), 
-#                     name = "Category",
-#                     labels = c("1980-2010 rcp 4.5", "1980-2010 rcp 8.5", 
-#                                "2070-2100 rcp 4.5", "2070-2100 rcp 8.5")) +
-#   theme_classic() +
-#   xlab("HSI") + ylab("Count") + ggtitle("Habitat Suitability")
-# 
-# 
-# 
-# 
-# #ggplot(data = Hist_data2, aes(x = Den)) +
-# # facet_wrap(~Country) +
-# #  geom_histogram(binwidth = 0.5)
-# 
-# r45 <- All_Time_F %>%
-#   filter(TimeRcp == "L45")
-# r85 <- All_Time_F %>%
-#   filter(TimeRcp == "L85")
-# 
-# ggplot(data = r85, aes(x= HSI)) +
-#   geom_histogram(binwidth = 0.1)
-# 
-# 
-# #  geom_histogram(data = Hist_data2, aes(x = HSI), binwidth = 0.1)
-# 
-# df1 <- Alosa45[[1]][[1]]$Ann_Enviro_cn$HSI
-# df2 <- Alosa85[[1]][[1]]$Ann_Enviro_cn$HSI
-# test <- setdiff(df1, df2)
