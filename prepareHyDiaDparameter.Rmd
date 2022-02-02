@@ -1,7 +1,7 @@
 ---
 date: "`r Sys.Date()`"
 author: "Lambert et al."
-title: "DiadES survey on diadromous fish"
+title: " HyDiad parameers based on DiadES survey and bibliography"
 output: 
   officedown::rdocx_document:
     mapstyles:
@@ -39,11 +39,8 @@ fish <- tibble(latin_name = c("Alosa alosa", "Alosa fallax",  "Lampetra fluviati
                          "Salmon",  "Sea Trout", 
                          "Sturgeon", "Smelt",
                          "Eel", "Mullet", "Flounder")) %>% 
-  mutate(latin_name = factor(latin_name,levels = latin_name))
-
-
-fish <- fish %>% inner_join(speciesName, by = 'latin_name') %>% 
-  select(-species_id)
+  mutate(latin_name = factor(latin_name,levels = latin_name)) %>%
+  inner_join(speciesName, by = 'latin_name') 
 
 read_rds("./brt/brt_input/basinSpecies.RDS") %>% as_tibble()
 read_rds("./brt/brt_input/eurodiadAA.RDS") %>% as_tibble()
@@ -938,7 +935,8 @@ expand_grid(outletDistance %>%
 HyDiaDParameter <- HyDiaDParameter %>% 
   mutate(withAllee = TRUE,
          withNatalStray = TRUE,
-         UsePresence = FALSE)
+         usePresence = FALSE,
+         rcp = 'rcp85')
 ```
 
 #  Final parameters table for HyDiaD

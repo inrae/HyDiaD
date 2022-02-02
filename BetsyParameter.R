@@ -10,7 +10,7 @@ HyDiaDParameter <- read_rds('./data_input/HyDiaDParameter.rds') %>%
 
 BestyParameter <-  read_xlsx("./data_input/Species_Parameters.xlsx") %>% 
   inner_join(HyDiaDParameter %>% 
-               dplyr::select(latin_name, Lname, name) %>%
+               dplyr::select(latin_name, Lname, name, species_id) %>%
                filter(Lname  %in% c('AAlosa','AFallax')), 
              by = "Lname") %>% 
   mutate (source =  'Betsy',
@@ -19,14 +19,18 @@ BestyParameter <-  read_xlsx("./data_input/Species_Parameters.xlsx") %>%
           Mdisp = -log(Fsurv)/MeanDist,
           withAllee = TRUE,
           withNatalStray = TRUE,
-          UsePresence =  FALSE) %>% 
-  dplyr:: select(source, latin_name, Lname, name, Dmax, lambda = AveLambda, nbCohorts = cohorts,
+          UsePresence =  FALSE,
+          rcp = 'rcp85') %>% 
+  dplyr:: select(source, 
+                 latin_name, Lname, name, species_id,
+                 Dmax, lambda = AveLambda, nbCohorts = cohorts,
                  AgeFirstMat = avAge, DistMean = MeanDist, DistMax,
                  alpha = alpha2, beta = beta2,
                  Sdisp, Mdisp, 
                  gamma  = y2,
                  r, 
-                 withAllee, withNatalStray, UsePresence) 
+                 withAllee, withNatalStray, UsePresence,
+                 rcp) 
 
 BestyParameter %>%
   bind_rows(HyDiaDParameter) %>%
