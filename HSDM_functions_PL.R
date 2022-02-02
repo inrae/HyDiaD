@@ -71,7 +71,7 @@ HyDiaDParameter <- read_rds("./data_input/HyDiaDParameter.rds")
 # Climate data from three climate models - df is projected monthly values from 1951-2100
 #   WILL NEED TO UPDATE THESE DATAFRAMES WHEN THE FOURTH MODEL IS ADDED! 
 #   Update pathway as needed; 
-rcp = 'rcp85'
+rcp = HyDiaDParameter %>% distinct(rcp)
 Enviro <- read_rds(paste0("data_input/Enviro_all_models_",rcp,".RDS"))
 
 # Need 10-year average of environmental data (1901-1911) for the initial HSI predictions
@@ -397,13 +397,13 @@ FUNinitNit <- function(output, BasinInfo, Disp_parm){
   output$Nit[,1] <- NA
   ### Check to see if populations should be limited by presence
   ## absence data.
-  if (Disp_parm$UsePresence == TRUE) {
+  if (Disp_parm$usePresence == TRUE) {
     ### Estimate an initial population size for the first year.
     output$Nit[,1] <-
       output$HSI[,1] * Disp_parm$Dmax * BasinInfo$Surf * Disp_parm$eh1 *
       BasinInfo$presence_absence
     
-  } else if(Disp_parm$UsePresence == FALSE){
+  } else if(Disp_parm$usePresence == FALSE){
     ### Estimate an initial population size for the first year.
     output$Nit[,1] <-
       output$HSI[,1] * Disp_parm$Dmax * BasinInfo$Surf * Disp_parm$eh1
@@ -816,7 +816,7 @@ for (Species in HyDiaDParameter %>% pull(Lname)) {
     ## Include "accidental" straying to natal catchment?
     withNatalStray = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(withNatalStray),
     ## Use presence/absence data when initializing populations?
-    UsePresence = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(UsePresence)
+    usePresence = HyDiaDParameter %>% filter(Lname == !!Species) %>% pull(usePresence)
   )
   
   ## Run the whole function ----
