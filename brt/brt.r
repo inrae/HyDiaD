@@ -296,26 +296,8 @@ AllSum2 <-  AllSum %>%
 colnm <- paste(c(rep(1, 3), rep(2, 3), rep(3, 3)), c(0.05, 0.01, 0.005)) #I still need to soft code this
 colnames(AllSum2) <- colnm
 
-#Try modifying this for column names:
-#dimnames(dev.results) <- list(paste("drop.",1:n.drops,sep=""), paste("rep.", 1:n.folds, sep=""))
-
-
-#for (i in 1:tmp3){
-# tc1 <-  tc
-#lr1 <- lr
-#colnm <- (sprintf("tc %g lr %g", tc1, lr1))
-#}
-
-
-
-#one <- lapply(tc, function(x){rep(x, length(tc))})
-#two <- lapply(lr, function(x){rep(x, length(lr))})
-#paste((lapply(tc, function(x){c(x, length(tc))})), lr, collapse = )
-
-
 
 #With tc of 4 and 5 and lr of 0.05, was told to restart the model with a smaller learning rate or smaller step size
-
 
 #Now need to write loop for gbm.simplify-----------------------------------------------------------
 #     takes an inital cross-validated model as produced by gbm.step 
@@ -416,116 +398,9 @@ for (i in 1:nruns){
   #plot fitted functions:
   gbm.plot2(Scen1.final[[i]], n.plots = length(scenarios3), write.title = TRUE)
   
-  #plot empty plots so have all plots on one sheet -- need to soft code this!
-  # plot(0,type='n',axes=FALSE, ann = FALSE)
-  #plot(0,type='n',axes=FALSE, ann = FALSE)
-  
-  #Come up with some way to save the graph....
-  #ggsave(filename = (paste("plots", tc, "lr", lr, "p", i, "tiff", sep = "." )), plot = last_plot(), device = "tiff",
-  #path = "C:/Users/betsy.barber/Work Folders/Documents/Niche models/Plots")
-  
   
 }
 
 
-#dev.copy(tiff, "myplot.tiff")
-#gbm.plot(Scen1.final[[2]], n.plots = 5, write.title = TRUE)
-
 dev.off()
-
-
-# #Now need to make predictions to future temp data:---------------------------------
-# #Load in new data set for projections:
-# projtest <- read.xlsx("projection_A1F1_2050_test.xlsx", sheetIndex = 1, header = TRUE, as.data.frame = TRUE)
-# 
-# projtest <- projtest %>%
-#   dplyr::arrange(Nom_bassin_versant)
-# 
-# colsp = c(2, 4, 6:8)
-# projtest[,colsp] <- apply(projtest[, colsp], 2, 
-#                           function(x) as.numeric(as.character(x)))
-# 
-# #Run projection - need to create loop for this
-# pred.acisturio.test <- predict(Scen1.final[[3]], projtest, n.trees = Scen1.final[[3]]$gbm.call$best.trees, type = "response")
-# calc.deviance(obs = projtest$Presence_absence_1800, pred = pred.acisturio.test, calc.mean = TRUE)
-# d <- cbind(projtest$Presence_absence_1800, pred.acisturio.test)
-# pres <- d[d[,1] == 1, 2]
-# abs <- d[d[,1] == 0, 2]
-# e <- evaluate(p = pres, a = abs)
-# e
-# 
-# #These results show that there are still 68 presences and 128 absences, but some have changed from presence to absence and vice versa
-# #Still need to calculate kappa or TSS as index of model evaluation!!
-# 
-# #Not needed------------------------------------------------------
-# c(rep(1, 3), rep(2, 3), rep(3, 3))
-# c(rep(tc[1], 3), rep(tc[2], 3), rep(tc[3], 3))
-# cv.loss.values <- apply(Scen1[[1]][[1]]$cv.loss.matrix, 2, mean)
-# cv.loss.ses <- Scen1[[1]][[1]]$cv.loss.ses
-# y.bar <- min(cv.loss.values)
-# trees.fitted <- Scen1[[1]][[1]]$trees.fitted
-# y.min <- min(cv.loss.values - cv.loss.ses) 
-# y.max <- max(cv.loss.values + cv.loss.ses) 
-# plot(Scen1[[1]][[1]]$trees.fitted, cv.loss.values, type = 'l', ylab = "holdout deviance",
-#      xlab = "no. of trees", ylim = c(y.min,y.max))
-# abline(h = y.bar, col = 2)
-# lines(trees.fitted, cv.loss.values + cv.loss.ses, lty=2)
-# lines(trees.fitted, cv.loss.values - cv.loss.ses, lty=2) 
-# target.trees <- trees.fitted[match(TRUE,cv.loss.values == y.bar)]
-# abline(v = target.trees, col=3)
-# title(paste("P/A, tc - ",tc,", lr - ",lr[1], sep=""))
-# 
-# 
-# 
-# summary(test1[[1]])
-# 
-# cv.loss.values <- apply(Scen1[[1]][[1]]$cv.loss.matrix,2,mean)
-# 
-# 
-# colnames(TotalEggs) <- c("Year", (lapply(1:ndams, function(x){paste0("TotalEggs",x)})))
-# for (b in 1:3){
-#   paste0("scen", b) <- list()
-# }
-# tmp <- 3
-# sapply(1:tmp, function(x) {test1[[x]] <- acisturio.tc2.lr005.base})
-# 
-# 
-# 
-# ex_fun <- function(arg1, arg2){
-#   col <- arg1 + arg2
-#   x <- as.data.frame(col)
-# }
-# arg1 <- seq(1, 10, by = 3)
-# arg2 <- seq(2, 11, by = 3)
-# df <- map2_dfr(arg1, arg2, ex_fun)
-# # If instead you want to bind by columns, use map2_dfc() or pmap_dfc()
-# df2 <- map2_dfc(arg1, arg2, ex_fun)
-# 
-# 
-# l2 <- list(
-#   list(num = 1:3,     letters[1:3]),
-#   list(num = 101:103, letters[4:6]),
-#   list()
-# )
-# l2 %>% map(c(2, 2))     
-# 
-# 
-# 
-# 
-# mean.delta <- apply(simple[[1]][[3]]$deviance.matrix, 1, mean)
-# se.delta <- sqrt(apply(simple[[1]][[3]]$deviance.matrix,1,var))/sqrt(n.folds)
-# y.max <- 1.5 * max(mean.delta + se.delta)
-# y.min <- 1.5 * min(mean.delta - se.delta)
-# y.min2 <- if (y.min < 0) y.min else 0
-# original.deviance.se <- round(Scen1[[1]][[3]]$cv.statistics$deviance.se,4)
-# #Plot for each panel:
-# plot(seq(0,n.drops),c(0,mean.delta),xlab="variables removed", ylab = "change in predictive deviance",type='l',ylim=c(y.min2,y.max))
-# lines(seq(0,n.drops),c(0,mean.delta) + c(0,se.delta),lty = 2)
-# lines(seq(0,n.drops),c(0,mean.delta) - c(0,se.delta),lty = 2)
-# abline(h = 0 , lty = 2, col = 3)
-# min.y <- min(c(0,mean.delta))
-# min.pos <- match(min.y,c(0,mean.delta)) - 1 # subtract one because now zero base
-# abline(v = min.pos, lty = 3, col = 2)
-# abline(h = original.deviance.se, lty = 2, col = 2)
-# title(paste("RFE deviance - PA - folds = ",n.folds, "tc - ", tc[i],", lr - ",lr[c], sep=""))
 
