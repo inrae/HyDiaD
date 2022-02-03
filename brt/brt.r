@@ -163,7 +163,7 @@ Alosa2 <- sqlAlosa %>%
 
 #Combine predictor variables w/ P/A data 1850---------------------------------
 sqlAlosa18 <- read_xlsx(paste0(path_input, "Alosa_1851_all data.xlsx"), sheet = 2)
-predvar <- read.xlsx(paste0(path_input, "All_pred_var_sturio.xlsx"), sheet = 1)
+predvar <- read_xlsx(paste0(path_input, "All_pred_var_sturio.xlsx"), sheet = 1)
 
 nom <- as.character(predvar$Basin)
 Alosa18 <- sqlAlosa18 %>%
@@ -176,20 +176,12 @@ str(Alosa18)
 
 ## Set up scenarios of predictors variables to be tested -----------------
 # Make sure that scenario names match what is in data table for every species:
-#
-scenarios1 <- as.matrix(expand.grid("log_surf",
-            "ecoregion_name",
-            "Slope",
-            c("TempAnn", "TempSum", "TempWin" ),
-            c("PrecAnn", "PrecSum", "PrecWin")))
-# 
-# scenarios2 <- c("log_slope", "TempAnn", "TempSum", "TempWin", "PrecAnn", "PrecSum", "PrecWin", "ecoregion_name")
+scenarios <- c("Alt", "Surf", "Length", "ann_salinity", "ann_SST", "ann_precip", "ann_mix_depth")
 
-scenarios3 <- c("log_slope", "TempAnn", "TempSum", "TempWin", "PrecAnn", "PrecSum", "PrecWin")
 
 #Run for each possible combination of scenarios:------------------------------------
-treeComplexities <- c(1:3) #define range of number of trees to test
-learningRates <- c(0.01, 0.005, 0.001) #define range of learning rate to test
+treeComplexities <- 1 # c(1:3) #define range of number of trees to test
+learningRates <- 0.005  # c(0.01, 0.005, 0.001) #define range of learning rate to test
 
 sum(Alosa18$presence_absence)
 # ======================================================================================= #
@@ -208,7 +200,7 @@ for (tc in treeComplexities) {
   for (lr in 1:length(learningRates)) {
     cat('tc=', tc, ' lr=', learningRates[lr], '\n')
     brt_result <- gbm.step(data = Alosa18 %>% as.data.frame(),
-                                     gbm.x = scenarios3,  #  scenarios1[1,],
+                                     gbm.x = scenarios,  #  scenarios1[1,],
                                      gbm.y = 'presence_absence', 
                                      family = "bernoulli",
                                      tree.complexity = tc,
@@ -216,7 +208,8 @@ for (tc in treeComplexities) {
                                      bag.fraction = 0.7,
                                      prev.stratify = TRUE, 
                                      verbose = FALSE, #controls screen reporting when running model
-                                     plot.main = FALSE) #controls if plot is made when model is run 
+                                     plot.main = FALSE,  #controls if plot is made when model is run 
+                                     n.folds = 10)
     
     test1[[lr]] <- brt_result
     Scen1[[tc]] <- test1
