@@ -98,7 +98,7 @@ brtFunc <- function(tc, lr, n.folds, bf){
   require(dismo)
   scenarios <- c("Alt", "Surf", "Length", "ann_salinity", "ann_SST", "ann_precip", "ann_mix_depth")
   set.seed(1)
-  tiff("Base model holdout deviance.tiff")
+  tiff(paste0(path_output, "Base model holdout deviance.tiff"))
   base_model <- gbm.step(data = All_Data,
                          gbm.x = scenarios, 
                          gbm.y = 4, 
@@ -122,16 +122,16 @@ brtFunc <- function(tc, lr, n.folds, bf){
   sum_results <- base_model$contributions
   
   #Boxplot of fitted values:
-  tiff("Base model boxplot fitted values.tiff")
+  tiff(paste0(path_output, "Base model boxplot fitted values.tiff"))
   boxplot(base_model$fitted~base_model$data$y, xlab = "Annual", ylab = "Fitted values")
   dev.off()
   
-  tiff("Base model fitted functions.tiff")
+  tiff(paste0(path_output, "Base model fitted functions.tiff"))
   gbm.plot(base_model, smooth = TRUE, rug = TRUE, write.title = TRUE)
   dev.off()
   
   n.drops = 5
-  tiff("simplified model predictive deviance.tiff")
+  tiff(paste0(path_output, "simplified model predictive deviance.tiff"))
   simp_model <- gbm.simplify(base_model, n.drops = n.drops)
   dev.off()
   
@@ -157,7 +157,7 @@ brtFunc <- function(tc, lr, n.folds, bf){
   #neg <- simp_model$deviance.summary$mean < 0
   
   
-  tiff("simplified model holdout deviance.tiff")
+  tiff(paste0(path_output, "simplified model holdout deviance.tiff"))
   set.seed(1)
   base_model_simplified <- gbm.step(data = All_Data,
                                     gbm.x = scenarios2[[1]], 
@@ -174,16 +174,16 @@ brtFunc <- function(tc, lr, n.folds, bf){
   
   simplified_model_results <- base_model_simplified
   
-  tiff("simplified model summary relative influence.tiff")
+  tiff(paste0(path_output, "simplified model summary relative influence.tiff"))
   summary(base_model_simplified)
   dev.off()
   simp_sum_results <- base_model_simplified$contributions
   
-  tiff("simplified model boxplot fitted values.tiff")
+  tiff(paste0(path_output, "simplified model boxplot fitted values.tiff"))
   boxplot(base_model_simplified$fitted~base_model_simplified$data$y, xlab = "Annual", ylab = "Fitted values")
   dev.off()
   
-  tiff("simplified model fitted functions.tiff")
+  tiff(paste0(path_output, "simplified model fitted functions.tiff"))
   gbm.plot(base_model_simplified, smooth = TRUE, rug = TRUE, write.title = TRUE)
   dev.off()
   
@@ -198,7 +198,7 @@ brtFunc <- function(tc, lr, n.folds, bf){
   e <- evaluate(p = pres, a = abs)
   
   ### Good to record 6 plots:
-  tiff("evaluate results.tiff")
+  tiff(paste0(path_output, "evaluate results.tiff"))
   par(mfrow = c(2,3))
   plot(e, 'ROC') 
   plot(e, 'kappa') #Use this to find max kappa for threshold for rounding PREDICTED values to calculate overall kappa and TSS
