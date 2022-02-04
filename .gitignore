@@ -11,6 +11,4 @@
 /survey/form
 
 /exportToDataBase/data_output
-
-
-
+/brt/brt_output/*
